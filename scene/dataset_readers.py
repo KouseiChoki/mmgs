@@ -22,6 +22,7 @@ from pathlib import Path
 from plyfile import PlyData, PlyElement
 from utils.sh_utils import SH2RGB
 from scene.gaussian_model import BasicPointCloud
+from file_utils import read
 
 class CameraInfo(NamedTuple):
     uid: int
@@ -107,8 +108,10 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder):
 
         image_path = os.path.join(images_folder, os.path.basename(extr.name))
         image_name = os.path.basename(image_path).split(".")[0]
-        image = Image.open(image_path)
-        mask = Image.open(masks[idx]) if mask_enable else None
+        # image = Image.open(image_path)
+        # mask = Image.open(masks[idx]) if mask_enable else None
+        image = read(image_path,type='hdr')
+        mask = read(masks[idx],type='mask') if mask_enable else None
 
         cam_info = CameraInfo(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=image,mask=mask,
                               image_path=image_path, image_name=image_name, width=width, height=height)

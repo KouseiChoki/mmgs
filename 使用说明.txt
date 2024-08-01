@@ -1,7 +1,7 @@
 获取3dgs代码:
 打开terminal,cd进入你希望存放的位置(YOUR_3DGS_ROOT)后输入：
 git clone http://10.35.116.93/mm/3dgs.git
-1.使用mmply或者mmgs生成pointcoud目录
+1.mmgs生成pointcoud目录(需要mmupdate或者python algo/conversion_tools/pointcloud/3dgs_reader.py)
 mmgs --root YOUR_RAW_DATA
 如果需要输出插值ja结果，添加--judder_angle关键字 如：--judder_angle 180
 
