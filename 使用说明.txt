@@ -1,0 +1,15 @@
+获取3dgs代码:
+打开terminal,cd进入你希望存放的位置(YOUR_3DGS_ROOT)后输入：
+git clone http://10.35.116.93/mm/3dgs.git
+1.使用mmply或者mmgs生成pointcoud目录
+mmgs --root YOUR_RAW_DATA
+如果需要输出插值ja结果，添加--judder_angle关键字 如：--judder_angle 180
+
+2.使用下面代码进行训练
+cd YOUR_3DGS_ROOT/3dgs && python train.py -r 1 -s YOUR_RAW_DATA/pointcloud --output YOUR_SAVE_NAME
+
+3.训练结果在output/YOUR_SAVE_NAME文件夹中，此时可以使用下面代码进行render
+cd YOUR_3DGS_ROOT/3dgs && python render.py -r 1 -s YOUR_RAW_DATA/pointcloud -m YOUR_3DGS_ROOT/output/YOUR_SAVE_NAME
+
+如果需要生成插值ja结果，则更改为如下：
+cd YOUR_3DGS_ROOT/3dgs && python render.py -r 1 -s YOUR_RAW_DATA/pointcloud_ja_180(这个根据第一步的ja生成文件夹决定) -m YOUR_3DGS_ROOT/output/YOUR_SAVE_NAME
