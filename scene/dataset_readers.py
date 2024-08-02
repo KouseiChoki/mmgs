@@ -76,7 +76,8 @@ def getNerfppNorm(cam_info):
 
 def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder):
     cam_infos = []
-    mask_path = images_folder.replace('/images','/masks')
+    # mask_path = images_folder.replace('/images','/masks')
+    mask_path = os.path.join(os.path.dirname(images_folder),'masks')
     mask_enable = os.path.isdir(mask_path)
     masks = jhelp_file(mask_path) if mask_enable else None
     for idx, key in enumerate(cam_extrinsics):
