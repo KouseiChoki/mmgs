@@ -55,7 +55,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     ema_loss_for_log = 0.0
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
-    for iteration in range(first_iter, opt.iterations + 1):        
+    rec = 0 
+    for iteration in range(first_iter, opt.iterations + 1):       
         if network_gui.conn == None:
             network_gui.try_connect()
         while network_gui.conn != None:
@@ -82,8 +83,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         # Pick a random Camera
         if not viewpoint_stack:
             viewpoint_stack = scene.getTrainCameras().copy()
-        viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
-
+            rec = 0
+        # viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
+        viewpoint_cam = viewpoint_stack.pop(0)
         # Render
         if (iteration - 1) == debug_from:
             pipe.debug = True
@@ -97,14 +99,20 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         gt_image = viewpoint_cam.original_image.cuda()
         # Mask loss
         if hasattr(viewpoint_cam,'mask') and viewpoint_cam.mask is not None:
-            Ll1 = l1_loss_mask(image, gt_image,viewpoint_cam.mask)
-            # loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim_mask(image, gt_image,viewpoint_cam.mask))
+            if args.rec>0:
+                if args.rec == rec:
+                    Ll1 = l1_loss(image, gt_image)
+                else:
+                    Ll1 = l1_loss_mask(image, gt_image,viewpoint_cam.mask)
+            else:
+                Ll1 = l1_loss_mask(image, gt_image,viewpoint_cam.mask)
+                # loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim_mask(image, gt_image,viewpoint_cam.mask))
             loss = Ll1
         else:
             Ll1 = l1_loss(image, gt_image)
             loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
 
-
+        rec += 1
         loss.backward()
 
         iter_end.record()
@@ -217,6 +225,7 @@ if __name__ == "__main__":
     parser.add_argument('--port', type=int, default=6009)
     parser.add_argument('--debug_from', type=int, default=-1)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
+    parser.add_argument('--rec', type=int, default = -1)
     parser.add_argument("--test_iterations", nargs="+", type=int, default=[30_000])
     parser.add_argument("--save_iterations", nargs="+", type=int, default=[3_000])
     parser.add_argument("--quiet", action="store_true")
