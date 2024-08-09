@@ -2,7 +2,7 @@
 Author: Qing Hong
 FirstEditTime: This function has been here since 1987. DON'T FXXKING TOUCH IT
 LastEditors: Qing Hong
-LastEditTime: 2024-08-01 14:45:34
+LastEditTime: 2024-08-09 15:56:09
 Description: 
          ▄              ▄
         ▌▒█           ▄▀▒▌     
@@ -377,9 +377,11 @@ def read(path,type='flo',lut_file=None,self_mask=False,OPENEXR=True,Unrealmode=F
             res = LUT.apply(tmp,interpolator=colour.algebra.table_interpolation_trilinear)*255
         else:
             if '.exr' in path:
-                res = mvr(path)
+              res = mvr(path)
+            elif '.tif' in path:
+              res = cv2.imread(path,-1)[...,::-1]/65535
             else:
-                res = cv2.imread(path)[...,::-1]/255
+              res = cv2.imread(path)[...,::-1]/255
         if type.lower() == 'image':
            res = (np.clip(res,0,1)*255).astype('uint8')
         res = res[...,:3]
@@ -545,24 +547,40 @@ def mvwrite(path,flow,compress='piz',OPENEXR=True,precision = 'float'):
         writer(path,flow,compress,precision_)
     elif '.flo' in path:
         write_flo_file(flow[...,:2],path)
+    elif '.tif' in path:
+        if len(flow.shape) == 2:
+          flow = np.repeat(flow[...,None],3,axis=2)
+        if flow.shape[2] == 2:
+          flow = np.insert(flow,2,0,axis=2)
+        flow = np.clip(flow,-1,1)
+        flow *= 65535
+        flow = flow.astype('uint16')
+        if flow.shape[2] ==4:
+          Image.fromarray(flow).save(path)
+        else:
+          cv2.imwrite(path,flow[...,:3][...,::-1])
     else:
         if len(flow.shape) == 2:
-            flow = np.repeat(flow[...,None],3,axis=2)
+          flow = np.repeat(flow[...,None],3,axis=2)
         if flow.shape[2] == 2:
-            flow = np.insert(flow,2,0,axis=2)
-        if flow.min() < -1:
-           flow = np.clip(flow,-1,1)
-        if flow.max() <= 1:
-           flow = ((flow+1)/2 * 255).astype('uint8')
+          flow = np.insert(flow,2,0,axis=2)
+        flow = np.clip(flow,-1,1)
+        if flow.min() < 0:
+          flow = ((flow+1)/2 * 255).astype('uint8')
+        else:
+          flow = (flow * 255).astype('uint8')
         if flow.shape[2] ==4:
-           Image.fromarray(flow).save(path)
+          Image.fromarray(flow).save(path)
         else:
           cv2.imwrite(path,flow[...,:3][...,::-1])
 
 def write(path,flow,compress='piz'):
     if flow is None or path is None:
       return
-    mvwrite(path,flow,compress)
+    if type(path) == str:
+      mvwrite(path,flow,compress)
+    else:
+      mvwrite(flow,path,compress)
 
     #front masked area set to 0.5 and back to 1 
 def save_mv_file(save_name,opt,valid,args):

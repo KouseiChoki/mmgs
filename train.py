@@ -216,7 +216,7 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
 
 if __name__ == "__main__":
     # Set up command line argument parser
-    # -r 1 -s /home/rg0775/QingHong/data/plytestdata/fg_avatar_0725/0729_3frames/pointcloud --output fhtest_0730_3frames_mask
+    # -r 1 -s /home/rg0775/QingHong/MM/3dgs/mydata/1121fh  --output 0810fh  
     parser = ArgumentParser(description="Training script parameters")
     lp = ModelParams(parser)
     op = OptimizationParams(parser)
