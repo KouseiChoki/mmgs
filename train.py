@@ -55,7 +55,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     ema_loss_for_log = 0.0
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
-    rec = 0 
+    cur = 1
     for iteration in range(first_iter, opt.iterations + 1):       
         if network_gui.conn == None:
             network_gui.try_connect()
@@ -83,7 +83,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         # Pick a random Camera
         if not viewpoint_stack:
             viewpoint_stack = scene.getTrainCameras().copy()
-            rec = 0
+            cur = 1
         # viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
         viewpoint_cam = viewpoint_stack.pop(0)
         # Render
@@ -99,8 +99,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         gt_image = viewpoint_cam.original_image.cuda()
         # Mask loss
         if hasattr(viewpoint_cam,'mask') and viewpoint_cam.mask is not None:
-            if args.rec>0:
-                if args.rec == rec:
+            if args.cur>0:
+                if args.cur == cur:
                     Ll1 = l1_loss(image, gt_image)
                 else:
                     Ll1 = l1_loss_mask(image, gt_image,viewpoint_cam.mask)
@@ -112,7 +112,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             Ll1 = l1_loss(image, gt_image)
             loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
 
-        rec += 1
+        cur += 1
         loss.backward()
 
         iter_end.record()
@@ -225,7 +225,7 @@ if __name__ == "__main__":
     parser.add_argument('--port', type=int, default=6009)
     parser.add_argument('--debug_from', type=int, default=-1)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
-    parser.add_argument('--rec', type=int, default = -1)
+    parser.add_argument('--cur', type=int, default = -1)
     parser.add_argument("--test_iterations", nargs="+", type=int, default=[30_000])
     parser.add_argument("--save_iterations", nargs="+", type=int, default=[3_000])
     parser.add_argument("--quiet", action="store_true")
