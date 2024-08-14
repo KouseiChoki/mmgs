@@ -101,7 +101,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         if hasattr(viewpoint_cam,'mask') and viewpoint_cam.mask is not None:
             if args.cur>0:
                 if args.cur == cur:
-                    Ll1 = l1_loss(image, gt_image)
+                    Ll1 = l1_loss(image, gt_image) * args.cur_enhance
                 else:
                     Ll1 = l1_loss_mask(image, gt_image,viewpoint_cam.mask)
             else:
@@ -229,12 +229,14 @@ if __name__ == "__main__":
     parser.add_argument("--test_iterations", nargs="+", type=int, default=[30_000])
     parser.add_argument("--save_iterations", nargs="+", type=int, default=[3_000])
     parser.add_argument("--quiet", action="store_true")
+    parser.add_argument("--cur_enhance",type=int,default=3)
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
     parser.add_argument("--output", type=str, default = '01')
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
-    args.iterations = 3000
+    if args.iterations not in args.save_iterations:
+        args.save_iterations.insert(0,args.iterations)
     print("Optimizing " + args.model_path)
     # Initialize system state (RNG)
     safe_state(args.quiet)
