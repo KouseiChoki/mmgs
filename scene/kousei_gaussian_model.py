@@ -21,7 +21,7 @@ from simple_knn._C import distCUDA2
 from utils.graphics_utils import BasicPointCloud
 from utils.general_utils import strip_symmetric, build_scaling_rotation
 
-class GaussianModel:
+class KouseiGaussianModel:
 
     def setup_functions(self):
         def build_covariance_from_scaling_rotation(scaling, scaling_modifier, rotation):
@@ -44,9 +44,12 @@ class GaussianModel:
     def __init__(self, sh_degree : int):
         self.active_sh_degree = 0
         self.max_sh_degree = sh_degree  
-        self._xyz = torch.empty(0)
-        self._features_dc = torch.empty(0)
-        self._features_rest = torch.empty(0)
+        self._xyz_fg = torch.empty(0)
+        self._features_dc_fg = torch.empty(0)
+        self._features_rest_fg = torch.empty(0)
+        self._xyz_bg = torch.empty(0)
+        self._features_dc_bg = torch.empty(0)
+        self._features_rest_bg = torch.empty(0)
         self._scaling = torch.empty(0)
         self._rotation = torch.empty(0)
         self._opacity = torch.empty(0)
@@ -57,6 +60,7 @@ class GaussianModel:
         self.percent_dense = 0
         self.spatial_lr_scale = 0
         self.setup_functions()
+        self.bg_num = 0
 
     def capture(self):
         return (
@@ -97,22 +101,67 @@ class GaussianModel:
         return self.scaling_activation(self._scaling)
     
     @property
+    def get_scaling_bg(self):
+        return self.scaling_activation(self._scaling[:self.bg_num,...])
+
+    @property
+    def get_scaling_fg(self):
+        return self.scaling_activation(self._scaling[self.bg_num:,...])
+    
+    @property
     def get_rotation(self):
         return self.rotation_activation(self._rotation)
     
     @property
+    def get_rotation_bg(self):
+        return self.rotation_activation(self._rotation[:self.bg_num,...])
+
+    
+    @property
+    def get_rotation_fg(self):
+        return self.rotation_activation(self._rotation[self.bg_num:,...])
+    
+    @property
     def get_xyz(self):
         return self._xyz
+
+    @property
+    def get_xyz_bg(self):
+        return self._xyz[:self.bg_num,...]
+
+    @property
+    def get_xyz_fg(self):
+        return self._xyz[self.bg_num:,...]
     
     @property
     def get_features(self):
         features_dc = self._features_dc
         features_rest = self._features_rest
         return torch.cat((features_dc, features_rest), dim=1)
+
+    @property
+    def get_features_bg(self):
+        features_dc = self._features_dc[:self.bg_num,...]
+        features_rest = self._features_rest[:self.bg_num,...]
+        return torch.cat((features_dc, features_rest), dim=1)
+    
+    @property
+    def get_features_fg(self):
+        features_dc = self._features_dc[self.bg_num:,...]
+        features_rest = self._features_rest[self.bg_num:,...]
+        return torch.cat((features_dc, features_rest), dim=1)
     
     @property
     def get_opacity(self):
         return self.opacity_activation(self._opacity)
+
+    @property
+    def get_opacity_bg(self):
+        return self.opacity_activation(self._opacity[:self.bg_num,...])
+    
+    @property
+    def get_opacity_fg(self):
+        return self.opacity_activation(self._opacity[self.bg_num:,...])
     
     def get_covariance(self, scaling_modifier = 1):
         return self.covariance_activation(self.get_scaling, scaling_modifier, self._rotation)
@@ -120,6 +169,44 @@ class GaussianModel:
     def oneupSHdegree(self):
         if self.active_sh_degree < self.max_sh_degree:
             self.active_sh_degree += 1
+
+
+    # def create_from_pcd_mixed(self, pcd : BasicPointCloud, spatial_lr_scale : float,fg=None):
+    #     self.spatial_lr_scale = spatial_lr_scale
+    #     fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float().cuda()
+    #     fused_color = RGB2SH(torch.tensor(np.asarray(pcd.colors)).float().cuda())
+    #     features = torch.zeros((fused_color.shape[0], 3, (self.max_sh_degree + 1) ** 2)).float().cuda()
+    #     features[:, :3, 0 ] = fused_color
+    #     features[:, 3:, 1:] = 0.0
+    #     self.bg_num = 1e9
+    #     dist2 = torch.clamp_min(distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()), 0.0000001)
+    def create_from_pcd_mixed(self, bg : BasicPointCloud, spatial_lr_scale : float,fg=None):
+        self.spatial_lr_scale = spatial_lr_scale
+        self.bg_num = bg.points.shape[0]
+        pcd_points = np.concatenate((bg.points,fg.points),axis=0)
+        fused_point_cloud = torch.tensor(pcd_points).float().cuda()
+        pcd_colors = np.concatenate((bg.colors,fg.colors),axis=0)
+        fused_color = RGB2SH(torch.tensor(pcd_colors).float().cuda())
+        features = torch.zeros((fused_color.shape[0], 3, (self.max_sh_degree + 1) ** 2)).float().cuda()
+        features[:, :3, 0 ] = fused_color
+        features[:, 3:, 1:] = 0.0
+        print("Number of points at initialisation bg: ", bg.points.shape[0])
+        print("Number of points at initialisation fg: ", fg.points.shape[0])
+        
+        dist2 = torch.clamp_min(distCUDA2(torch.from_numpy(np.asarray(pcd_points)).float().cuda()), 0.0000001)
+        scales = torch.log(torch.sqrt(dist2))[...,None].repeat(1, 3)
+        rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
+        rots[:, 0] = 1
+
+        opacities = inverse_sigmoid(0.1 * torch.ones((fused_point_cloud.shape[0], 1), dtype=torch.float, device="cuda"))
+
+        self._xyz = nn.Parameter(fused_point_cloud.requires_grad_(True))
+        self._features_dc = nn.Parameter(features[:,:,0:1].transpose(1, 2).contiguous().requires_grad_(True))
+        self._features_rest = nn.Parameter(features[:,:,1:].transpose(1, 2).contiguous().requires_grad_(True))
+        self._scaling = nn.Parameter(scales.requires_grad_(True))
+        self._rotation = nn.Parameter(rots.requires_grad_(True))
+        self._opacity = nn.Parameter(opacities.requires_grad_(True))
+        self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
 
     def create_from_pcd(self, pcd : BasicPointCloud, spatial_lr_scale : float):
         self.spatial_lr_scale = spatial_lr_scale
@@ -191,7 +278,7 @@ class GaussianModel:
     def save_ply(self, path):
         mkdir_p(os.path.dirname(path))
 
-        xyz = self._xyz.detach().cpu().numpy()
+        xyz = self._xyz.detach().cpu().numpy() #0625问题 很大 4359330
         normals = np.zeros_like(xyz)
         f_dc = self._features_dc.detach().transpose(1, 2).flatten(start_dim=1).contiguous().cpu().numpy()
         f_rest = self._features_rest.detach().transpose(1, 2).flatten(start_dim=1).contiguous().cpu().numpy()
@@ -402,6 +489,14 @@ class GaussianModel:
 
         torch.cuda.empty_cache()
 
-    def add_densification_stats(self, viewspace_point_tensor, update_filter):
-        self.xyz_gradient_accum[update_filter] += torch.norm(viewspace_point_tensor.grad[update_filter,:2], dim=-1, keepdim=True)
-        self.denom[update_filter] += 1
+    def add_densification_stats(self, viewspace_point_tensor, update_filter,bg=None):
+        if bg is not None:
+            if bg:
+                self.xyz_gradient_accum[:self.bg_num][update_filter] += torch.norm(viewspace_point_tensor.grad[update_filter,:2], dim=-1, keepdim=True)
+                self.denom[:self.bg_num][update_filter] += 1
+            else:
+                self.xyz_gradient_accum[self.bg_num:][update_filter] += torch.norm(viewspace_point_tensor.grad[update_filter,:2], dim=-1, keepdim=True)
+                self.denom[self.bg_num:][update_filter] += 1
+        else:
+            self.xyz_gradient_accum[update_filter] += torch.norm(viewspace_point_tensor.grad[update_filter,:2], dim=-1, keepdim=True)
+            self.denom[update_filter] += 1

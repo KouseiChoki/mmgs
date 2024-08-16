@@ -15,13 +15,17 @@ from random import randint
 from utils.loss_utils import l1_loss,l1_loss_mask, ssim,ssim_mask
 from gaussian_renderer import render, network_gui
 import sys
-from scene import Scene, GaussianModel
+# from scene import Scene, GaussianModel
+from scene import KouseiScene as Scene
+from scene import KouseiGaussianModel as GaussianModel
+
 from utils.general_utils import safe_state
 import uuid
 from tqdm import tqdm
 from utils.image_utils import psnr
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
+from myutil import mask_adjust
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
@@ -33,13 +37,23 @@ def print_tensor_memory():
     for segment in snapshot:
         if segment["state"] == "active_allocated":
             print(f"Tensor: {segment['addr']} | Size: {segment['requested_size'] / 1024**2:.2f} MB")
+    
 # torch.cuda.memory_snapshot()
-# -r 1 -s /home/rg0775/QingHong/data/plytestdata/from_fh_0717_small/pointcloud --output fhtest_small_0718_full
+# -r 1 -s /home/rg0775/QingHong/MM/3dgs/mydata/1119_to_1123  --output 0815 --cur 3 --iterations 3000
+# -r 1 -s /home/rg0775/QingHong/MM/3dgs/mydata/1119_to_1121_cur2  --output 0815  --iterations 3000    
+# -r 1 -s /home/rg0775/QingHong/MM/3dgs/mydata/1119_to_1121_cur2  --output 0815  --iterations 3000  --cur 2  
+# 
+
+
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from,output):
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset,output)
     gaussians = GaussianModel(dataset.sh_degree)
     scene = Scene(dataset, gaussians)
+    if False:
+        scene.save(1)
+        sys.exit(0)
+
     gaussians.training_setup(opt)
     if checkpoint:
         (model_params, first_iter) = torch.load(checkpoint)
@@ -55,7 +69,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     ema_loss_for_log = 0.0
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
-    cur = 1
+    cur = 0
     for iteration in range(first_iter, opt.iterations + 1):       
         if network_gui.conn == None:
             network_gui.try_connect()
@@ -83,7 +97,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         # Pick a random Camera
         if not viewpoint_stack:
             viewpoint_stack = scene.getTrainCameras().copy()
-            cur = 1
+            cur = 0
         # viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
         viewpoint_cam = viewpoint_stack.pop(0)
         # Render
@@ -91,68 +105,99 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             pipe.debug = True
 
         bg = torch.rand((3), device="cuda") if opt.random_background else background
-
-        render_pkg = render(viewpoint_cam, gaussians, pipe, bg)
-        image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
-
-        # Loss
-        gt_image = viewpoint_cam.original_image.cuda()
-        # Mask loss
+        render_step = [None]
         if hasattr(viewpoint_cam,'mask') and viewpoint_cam.mask is not None:
             if args.cur>0:
-                if args.cur == cur:
-                    Ll1 = l1_loss(image, gt_image)
-                else:
-                    Ll1 = l1_loss_mask(image, gt_image,viewpoint_cam.mask)
+                if args.cur != cur: #背景
+                    render_step = [True]
+                else: #背景+前景
+                    render_step = [True,False,None]
             else:
-                Ll1 = l1_loss_mask(image, gt_image,viewpoint_cam.mask)
-                # loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim_mask(image, gt_image,viewpoint_cam.mask))
-            loss = Ll1
-        else:
-            Ll1 = l1_loss(image, gt_image)
-            loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
+                render_step = [True]
+        for render_bg in render_step:
+            render_pkg = render(viewpoint_cam, gaussians, pipe, bg , render_bg=render_bg)
+            image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
+            # if iteration >= 100 and render_bg:
+            #     import cv2
+            #     import numpy as np 
+            #     tmp = np.transpose(image.detach().cpu().numpy(),(1,2,0)) *255
+            #     cv2.imwrite('/home/rg0775/QingHong/MM/3dgs/1.png',tmp.astype('uint8')[...,::-1])
+            #     tmp = np.transpose(viewpoint_cam.original_image.detach().cpu().numpy(),(1,2,0)) *255
+            #     cv2.imwrite('/home/rg0775/QingHong/MM/3dgs/2.png',tmp.astype('uint8')[...,::-1])
+            #     tmp = viewpoint_cam.mask.detach().cpu().numpy().astype('uint8') *255
+            #     tmp = np.repeat(tmp[..., np.newaxis], 3, axis=-1)
+            #     cv2.imwrite('/home/rg0775/QingHong/MM/3dgs/3.png',tmp.astype('uint8')[...,::-1])
 
-        cur += 1
-        loss.backward()
+            # Loss
+            gt_image = viewpoint_cam.original_image.float().cuda()
+            # Mask loss
+            if render_bg is not None:
+                if not render_bg: #fg loss
+                    fg_mask = viewpoint_cam.mask
+                    if False:
+                        tmp_mask = fg_mask.detach().cpu().numpy().astype('float32')
+                        tmp_mask = mask_adjust(tmp_mask,-10)
+                        fg_mask = torch.tensor(tmp_mask).bool().to(viewpoint_cam.mask.device)
+                    Ll1 = l1_loss_mask(image, gt_image,~viewpoint_cam.mask) 
+                else: #bg loss
+                    Ll1 = l1_loss_mask(image, gt_image,viewpoint_cam.mask) 
+                loss = Ll1 
+            else:
+                Ll1 = l1_loss(image, gt_image) * 2
+                loss = Ll1
+                # loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
 
-        iter_end.record()
+            cur += 1
+            loss.backward()
 
-        with torch.no_grad():
-            # Progress bar
-            ema_loss_for_log = 0.4 * loss.item() + 0.6 * ema_loss_for_log
-            if iteration % 10 == 0:
-                progress_bar.set_postfix({"Loss": f"{ema_loss_for_log:.{7}f}"})
-                progress_bar.update(10)
-            if iteration == opt.iterations:
-                progress_bar.close()
+            iter_end.record()
 
-            # Log and save
-            training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background))
-            if (iteration in saving_iterations):
-                print("\n[ITER {}] Saving Gaussians".format(iteration))
-                scene.save(iteration)
+            with torch.no_grad():
+                # Progress bar
+                ema_loss_for_log = 0.4 * loss.item() + 0.6 * ema_loss_for_log
+                if iteration % 10 == 0:
+                    progress_bar.set_postfix({"Loss": f"{ema_loss_for_log:.{7}f}"})
+                    progress_bar.update(10)
+                if iteration == opt.iterations:
+                    progress_bar.close()
 
-            # Densification
-            if iteration < opt.densify_until_iter:
-                # Keep track of max radii in image-space for pruning
-                gaussians.max_radii2D[visibility_filter] = torch.max(gaussians.max_radii2D[visibility_filter], radii[visibility_filter])
-                gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
+                # Log and save
+                training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background))
+                if (iteration in saving_iterations):
+                    if render_bg is not None and not render_bg:
+                        pass
+                    else:
+                        print("\n[ITER {}] Saving Gaussians".format(iteration))
+                        scene.save(iteration)
 
-                if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
-                    size_threshold = 20 if iteration > opt.opacity_reset_interval else None
-                    gaussians.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
-                
-                if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
-                    gaussians.reset_opacity()
+                # Densification
+                if iteration < opt.densify_until_iter:
+                    # Keep track of max radii in image-space for pruning
+                    if render_bg is None:
+                        max_radii2D = gaussians.max_radii2D
+                    else:
+                        if render_bg:
+                            max_radii2D = gaussians.max_radii2D[:gaussians.bg_num]
+                        else:
+                            max_radii2D = gaussians.max_radii2D[gaussians.bg_num:]
+                    max_radii2D[visibility_filter] = torch.max(max_radii2D[visibility_filter], radii[visibility_filter])
+                    gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter,bg = render_bg)
 
-            # Optimizer step
-            if iteration < opt.iterations:
-                gaussians.optimizer.step()
-                gaussians.optimizer.zero_grad(set_to_none = True)
+                    if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
+                        size_threshold = 20 if iteration > opt.opacity_reset_interval else None
+                        gaussians.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
+                    
+                    if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
+                        gaussians.reset_opacity()
 
-            if (iteration in checkpoint_iterations):
-                print("\n[ITER {}] Saving Checkpoint".format(iteration))
-                torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")
+                # Optimizer step
+                if iteration < opt.iterations:
+                    gaussians.optimizer.step()
+                    gaussians.optimizer.zero_grad(set_to_none = True)
+
+                # if (iteration in checkpoint_iterations):
+                #     print("\n[ITER {}] Saving Checkpoint".format(iteration))
+                #     torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")
 
 def prepare_output_and_logger(args,output):    
     print(args)
@@ -226,6 +271,7 @@ if __name__ == "__main__":
     parser.add_argument('--debug_from', type=int, default=-1)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
     parser.add_argument('--cur', type=int, default = -1)
+    parser.add_argument('--enhance', type=int, default = 1)
     parser.add_argument("--test_iterations", nargs="+", type=int, default=[30_000])
     parser.add_argument("--save_iterations", nargs="+", type=int, default=[3_000])
     parser.add_argument("--quiet", action="store_true")
@@ -234,11 +280,17 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=str, default = '01')
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
-    args.iterations = 3000
-    print("Optimizing " + args.model_path)
+    if args.iterations not in args.save_iterations:
+        args.save_iterations.insert(0,args.iterations)
+    # print("Optimizing " + args.model_path)
     # Initialize system state (RNG)
     safe_state(args.quiet)
-
+    if args.cur<0:
+        import re
+        match = re.search(r'cur_(\d+)', args.source_path)
+        if match is not None:
+            args.cur = int(match.group(1))
+        print(f'CF frame is :{args.cur}')
     # Start GUI server, configure and run training
     network_gui.init(args.ip, args.port)
     torch.autograd.set_detect_anomaly(args.detect_anomaly)

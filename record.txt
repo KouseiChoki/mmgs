@@ -1,0 +1,22 @@
+python /home/rg0775/QingHong/MM/mm/algo/conversion_tools/pointcloud/3dgs_reader.py --root /home/rg0775/QingHong/data/plytestdata/fg_avatar_0725/0729_3frames --baseline_distance 0.65
+cd /home/rg0775/QingHong/MM/3dgs && python train.py --cur_mask_only -r 1 -s /home/rg0775/QingHong/data/plytestdata/fg_avatar_0725/0729_3frames/pointcloud --output 0806
+python render.py -r 1 --name b065  -s /home/rg0775/QingHong/data/plytestdata/fg_avatar_0725/0729_3frames/pointcloud -m /home/rg0775/QingHong/MM/3dgs/output/0806
+
+
+
+
+python /home/rg0775/QingHong/MM/mm/algo/conversion_tools/pointcloud/3dgs_reader.py --root /home/rg0775/QingHong/MM/3dgs/mydata/45 --baseline_distance 0.03
+cd /home/rg0775/QingHong/MM/3dgs && python train.py --rec 1 -r 1 -s /home/rg0775/QingHong/MM/3dgs/mydata/45/pointcloud --output 0807
+python render.py -r 1 --name b003  -s /home/rg0775/QingHong/MM/3dgs/mydata/45/pointcloud -m /home/rg0775/QingHong/MM/3dgs/output/0807
+
+
+
+
+cd /home/rg0775/QingHong/MM/3dgs && python train.py -r 1 -s /home/rg0775/QingHong/MM/flowmap/outputs/0808/colmap --output 0808
+python render.py -r 1 --name normal  -s /home/rg0775/QingHong/MM/flowmap/outputs/0808/colmap -m /home/rg0775/QingHong/MM/3dgs/output/0808
+
+
+python /home/rg0775/QingHong/MM/mm/algo/conversion_tools/pointcloud/3dgs_reader.py --root /home/rg0775/QingHong/MM/3dgs/mydata/1120
+
+cd /home/rg0775/QingHong/MM/3dgs && python train.py -r 1 -s /home/rg0775/QingHong/MM/3dgs/mydata/1119_to_1121  --output 0814_test
+python render.py -r 1 --name normal  -s /home/rg0775/QingHong/MM/3dgs/mydata/1119_to_1123 -m /home/rg0775/QingHong/MM/3dgs/output/0814

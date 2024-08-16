@@ -39,6 +39,7 @@ class CameraInfo(NamedTuple):
 
 class SceneInfo(NamedTuple):
     point_cloud: BasicPointCloud
+    fg_point_cloud: BasicPointCloud
     train_cameras: list
     test_cameras: list
     nerf_normalization: dict
@@ -172,6 +173,7 @@ def readColmapSceneInfo(path, images, eval, llffhold=8):
     ply_path = os.path.join(path, "sparse/0/points3D.ply")
     bin_path = os.path.join(path, "sparse/0/points3D.bin")
     txt_path = os.path.join(path, "sparse/0/points3D.txt")
+    fg_ply_path = os.path.join(path, "sparse/0/fg_points3D.ply")
     if not os.path.exists(ply_path):
         print("Converting point3d.bin to .ply, will happen only the first time you open the scene.")
         try:
@@ -183,8 +185,12 @@ def readColmapSceneInfo(path, images, eval, llffhold=8):
         pcd = fetchPly(ply_path)
     except:
         pcd = None
+    try:
+        fgpcd = fetchPly(fg_ply_path)
+    except:
+        fgpcd = None
 
-    scene_info = SceneInfo(point_cloud=pcd,
+    scene_info = SceneInfo(point_cloud=pcd,fg_point_cloud=fgpcd,
                            train_cameras=train_cam_infos,
                            test_cameras=test_cam_infos,
                            nerf_normalization=nerf_normalization,

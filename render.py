@@ -21,15 +21,16 @@ from argparse import ArgumentParser
 from arguments import ModelParams, PipelineParams, get_combined_args
 from gaussian_renderer import GaussianModel
 from file_utils import write
+from utils.graphics_utils import getWorld2View2,getProjectionMatrix
 
 def render_set(model_path, name, iteration, views, gaussians, pipeline, background,baseline_distance=0,output_name='ours'):
     render_path = os.path.join(model_path, name, "{}_{}".format(output_name,iteration), "renders")
     gts_path = os.path.join(model_path, name, "{}_{}".format(output_name,iteration), "gt")
     makedirs(render_path, exist_ok=True)
     makedirs(gts_path, exist_ok=True)
-    # if baseline_distance:
-    #     right_path = os.path.join(model_path, name, "{}_{}".format(output_name,iteration), "right_renders")
-    #     makedirs(right_path, exist_ok=True)
+    if baseline_distance!=0:
+        bd_path = os.path.join(model_path, name, "{}_{}".format(output_name,iteration), f"baseline_distance_{baseline_distance}")
+        makedirs(bd_path, exist_ok=True)
 
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
         rendering = render(view, gaussians, pipeline, background)["render"]
@@ -39,7 +40,15 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
         write(rendered, os.path.join(render_path, '{0:05d}'.format(idx) + f".{args.format}"))
         # torchvision.utils.save_image(gt, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
         write(gt, os.path.join(gts_path, '{0:05d}'.format(idx) + f".{args.format}"))
-        # if baseline_distance:
+        if baseline_distance!=0:
+            view.T[0] -= baseline_distance
+            view.world_view_transform = torch.tensor(getWorld2View2(view.R, view.T, view.trans, view.scale)).transpose(0, 1).cuda()
+            view.projection_matrix = getProjectionMatrix(znear=view.znear, zfar=view.zfar, fovX=view.FoVx, fovY=view.FoVy).transpose(0,1).cuda()
+            view.full_proj_transform = (view.world_view_transform.unsqueeze(0).bmm(view.projection_matrix.unsqueeze(0))).squeeze(0)
+            view.camera_center = view.world_view_transform.inverse()[3, :3]
+            bd_rendering = render(view, gaussians, pipeline, background)["render"]
+            bd_rendered = bd_rendering.cpu().detach().numpy().transpose(1,2,0)
+            write(bd_rendered, os.path.join(bd_path, '{0:05d}'.format(idx) + f".{args.format}"))
         #     view.world_view_transform[0,-1] += baseline_distance
         #     view.camera_center[0] += baseline_distance
         #     rendering_right = render(view, gaussians, pipeline, background)["render"]
