@@ -111,10 +111,12 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 if args.cur != cur: #背景
                     render_step = [True]
                 else: #背景+前景
-                    render_step = [True,False,None]
+                    render_step = [True,None]
             else:
                 render_step = [True]
         for render_bg in render_step:
+            # with torch.no_grad():
+            #     gaussians._scaling[gaussians.bg_num:].clamp_(max=0)
             render_pkg = render(viewpoint_cam, gaussians, pipe, bg , render_bg=render_bg)
             image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
             # if iteration >= 100 and render_bg:
@@ -139,17 +141,21 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                         tmp_mask = mask_adjust(tmp_mask,-10)
                         fg_mask = torch.tensor(tmp_mask).bool().to(viewpoint_cam.mask.device)
                     Ll1 = l1_loss_mask(image, gt_image,~viewpoint_cam.mask) 
+                    # mask_gt_image = gt_image.copy()
+                    # print(mask_gt_image.shape)
+                    # mask_gt_image[:,~viewpoint_cam.mask] 
+                    # Ll1 = l1_loss(image, mask_gt_image) 
                 else: #bg loss
                     Ll1 = l1_loss_mask(image, gt_image,viewpoint_cam.mask) 
                 loss = Ll1 
             else:
-                Ll1 = l1_loss(image, gt_image) * 2
+                Ll1 = l1_loss(image, gt_image) 
                 loss = Ll1
                 # loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
 
             cur += 1
             loss.backward()
-
+            
             iter_end.record()
 
             with torch.no_grad():
@@ -164,12 +170,13 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 # Log and save
                 training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background))
                 if (iteration in saving_iterations):
-                    if render_bg is not None and not render_bg:
-                        pass
-                    else:
-                        print("\n[ITER {}] Saving Gaussians".format(iteration))
-                        scene.save(iteration)
-
+                    # if render_bg is not None and not render_bg:
+                    #     pass
+                    # else:
+                    print("\n[ITER {}] Saving Gaussians".format(iteration))
+                    scene.save(iteration)
+                    sys.exit(0)
+                # print(gaussians._scaling[gaussians.bg_num:].max(),gaussians._scaling[gaussians.bg_num:].mean())
                 # Densification
                 if iteration < opt.densify_until_iter:
                     # Keep track of max radii in image-space for pruning
@@ -198,7 +205,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 # if (iteration in checkpoint_iterations):
                 #     print("\n[ITER {}] Saving Checkpoint".format(iteration))
                 #     torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")
-
+            
 def prepare_output_and_logger(args,output):    
     print(args)
     if not args.model_path:

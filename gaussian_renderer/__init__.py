@@ -40,7 +40,7 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
             opacity = pc.get_opacity_fg
             scales = pc.get_scaling_fg
             rotations = pc.get_rotation_fg
-
+            # print(scales.min(),scales.mean())
     # scales = pc.get_scaling_bg if render_bg else pc.get_scaling
     # rotations = pc.get_rotation_bg if render_bg else pc.get_rotation
     # opacity = pc.get_opacity_bg if render_bg else pc.get_opacity
