@@ -114,6 +114,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     render_step = [True,None]
             else:
                 render_step = [True]
+        if only_fg:
+            render_step = [False]
         for render_bg in render_step:
             # with torch.no_grad():
             #     gaussians._scaling[gaussians.bg_num:].clamp_(max=0)
@@ -282,9 +284,11 @@ if __name__ == "__main__":
     parser.add_argument("--test_iterations", nargs="+", type=int, default=[30_000])
     parser.add_argument("--save_iterations", nargs="+", type=int, default=[3_000])
     parser.add_argument("--quiet", action="store_true")
+    parser.add_argument("--only_fg", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
     parser.add_argument("--output", type=str, default = '01')
+
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
     if args.iterations not in args.save_iterations:
