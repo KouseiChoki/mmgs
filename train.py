@@ -114,7 +114,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     render_step = [True,None]
             else:
                 render_step = [True]
-        if only_fg:
+        if args.only_fg:
             render_step = [False]
         for render_bg in render_step:
             # with torch.no_grad():
