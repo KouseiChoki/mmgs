@@ -113,7 +113,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 else: #背景+前景
                     render_step = [True,None]
             else:
-                render_step = [True]
+                render_step = [None]
         if args.only_fg:
             render_step = [False]
         for render_bg in render_step:
@@ -301,7 +301,8 @@ if __name__ == "__main__":
         match = re.search(r'cur_(\d+)', args.source_path)
         if match is not None:
             args.cur = int(match.group(1))
-        print(f'CF frame is :{args.cur}')
+        if args.cur>0:
+            print(f'CF frame is :{args.cur}')
     # Start GUI server, configure and run training
     network_gui.init(args.ip, args.port)
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
