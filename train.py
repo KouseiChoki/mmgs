@@ -105,21 +105,22 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             pipe.debug = True
 
         bg = torch.rand((3), device="cuda") if opt.random_background else background
-        render_step = [None]
+        render_steps = ['all']
         if hasattr(viewpoint_cam,'mask') and viewpoint_cam.mask is not None:
             if args.cur>0:
                 if args.cur != cur: #背景
-                    render_step = [True]
-                else: #背景+前景
-                    render_step = [True,None]
+                    render_steps = ['bg']
+                else: #背景+全部
+                    render_steps = ['bg','all']
             else:
-                render_step = [None]
+                render_steps = ['bg']
         if args.only_fg:
-            render_step = [False]
-        for render_bg in render_step:
+            render_steps = ['fg']
+        for render_step in render_steps:
+            render_bg = render_step == 'bg'
             # with torch.no_grad():
             #     gaussians._scaling[gaussians.bg_num:].clamp_(max=0)
-            render_pkg = render(viewpoint_cam, gaussians, pipe, bg , render_bg=render_bg)
+            render_pkg = render(viewpoint_cam, gaussians, pipe, bg , render_bg)
             image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
             # if iteration >= 100 and render_bg:
             #     import cv2
@@ -135,8 +136,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             # Loss
             gt_image = viewpoint_cam.original_image.float().cuda()
             # Mask loss
-            if render_bg is not None:
-                if not render_bg: #fg loss
+            if render_step != 'all':
+                if render_step == 'fg':
                     fg_mask = viewpoint_cam.mask
                     if False:
                         tmp_mask = fg_mask.detach().cpu().numpy().astype('float32')
@@ -147,8 +148,10 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     # print(mask_gt_image.shape)
                     # mask_gt_image[:,~viewpoint_cam.mask] 
                     # Ll1 = l1_loss(image, mask_gt_image) 
-                else: #bg loss
+                elif render_step == 'bg': #bg loss
                     Ll1 = l1_loss_mask(image, gt_image,viewpoint_cam.mask) 
+                else:
+                    raise NotImplementedError(f'error{render_step}')
                 loss = Ll1 
             else:
                 Ll1 = l1_loss(image, gt_image) 
@@ -182,11 +185,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 # Densification
                 if iteration < opt.densify_until_iter:
                     # Keep track of max radii in image-space for pruning
-                    if render_bg is None:
+                    if render_step == 'all':
                         max_radii2D = gaussians.max_radii2D
                     else:
-                        if render_bg:
-                            max_radii2D = gaussians.max_radii2D[:gaussians.bg_num]
+                        if render_step == 'bg':
+                            if gaussians.bg_num == 0:
+                                max_radii2D = gaussians.max_radii2D
+                            else:
+                                max_radii2D = gaussians.max_radii2D[:gaussians.bg_num]
                         else:
                             max_radii2D = gaussians.max_radii2D[gaussians.bg_num:]
                     max_radii2D[visibility_filter] = torch.max(max_radii2D[visibility_filter], radii[visibility_filter])

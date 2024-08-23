@@ -47,9 +47,6 @@ class KouseiGaussianModel:
         self._xyz_fg = torch.empty(0)
         self._features_dc_fg = torch.empty(0)
         self._features_rest_fg = torch.empty(0)
-        self._xyz_bg = torch.empty(0)
-        self._features_dc_bg = torch.empty(0)
-        self._features_rest_bg = torch.empty(0)
         self._scaling = torch.empty(0)
         self._rotation = torch.empty(0)
         self._opacity = torch.empty(0)
@@ -102,6 +99,8 @@ class KouseiGaussianModel:
     
     @property
     def get_scaling_bg(self):
+        if self.bg_num == 0:
+            return self.scaling_activation(self._scaling)
         return self.scaling_activation(self._scaling[:self.bg_num,...])
 
     @property
@@ -114,6 +113,8 @@ class KouseiGaussianModel:
     
     @property
     def get_rotation_bg(self):
+        if self.bg_num == 0:
+            return self.rotation_activation(self._rotation)
         return self.rotation_activation(self._rotation[:self.bg_num,...])
 
     
@@ -127,6 +128,8 @@ class KouseiGaussianModel:
 
     @property
     def get_xyz_bg(self):
+        if self.bg_num == 0:
+            return self._xyz
         return self._xyz[:self.bg_num,...]
 
     @property
@@ -141,6 +144,10 @@ class KouseiGaussianModel:
 
     @property
     def get_features_bg(self):
+        if self.bg_num == 0:
+            features_dc = self._features_dc
+            features_rest = self._features_rest
+            return torch.cat((features_dc, features_rest), dim=1)
         features_dc = self._features_dc[:self.bg_num,...]
         features_rest = self._features_rest[:self.bg_num,...]
         return torch.cat((features_dc, features_rest), dim=1)
@@ -157,6 +164,8 @@ class KouseiGaussianModel:
 
     @property
     def get_opacity_bg(self):
+        if self.bg_num == 0:
+            return self.opacity_activation(self._opacity)
         return self.opacity_activation(self._opacity[:self.bg_num,...])
     
     @property
@@ -490,7 +499,7 @@ class KouseiGaussianModel:
         torch.cuda.empty_cache()
 
     def add_densification_stats(self, viewspace_point_tensor, update_filter,bg=None):
-        if bg is not None:
+        if bg is not None and self.bg_num != 0:
             if bg:
                 self.xyz_gradient_accum[:self.bg_num][update_filter] += torch.norm(viewspace_point_tensor.grad[update_filter,:2], dim=-1, keepdim=True)
                 self.denom[:self.bg_num][update_filter] += 1
