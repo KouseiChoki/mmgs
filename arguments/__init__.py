@@ -50,7 +50,7 @@ class ModelParams(ParamGroup):
         self._source_path = ""
         self._model_path = ""
         self._images = "images"
-        self._resolution = -1
+        self._resolution = 1
         self._white_background = False
         self.data_device = "cuda"
         self.eval = False
@@ -89,8 +89,9 @@ class OptimizationParams(ParamGroup):
         self.random_background = False
         super().__init__(parser, "Optimization Parameters")
 
-def get_combined_args(parser : ArgumentParser):
-    cmdlne_string = sys.argv[1:]
+def get_combined_args(parser : ArgumentParser,cmdlne_string=None):
+    if cmdlne_string is None:
+        cmdlne_string = sys.argv[1:]
     cfgfile_string = "Namespace()"
     args_cmdline = parser.parse_args(cmdlne_string)
 

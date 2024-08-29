@@ -25,7 +25,7 @@ from tqdm import tqdm
 from utils.image_utils import psnr
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
-from myutil import mask_adjust
+from myutil import mask_adjust,write_txt
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
@@ -180,6 +180,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     # else:
                     print("\n[ITER {}] Saving Gaussians".format(iteration))
                     scene.save(iteration)
+                    mid_num = len(scene.getTrainCameras())//2
+                    write_txt(os.path.join(scene.model_path,'source_path.txt'),[args.source_path,scene.getTrainCameras()[mid_num].image_name])
                     sys.exit(0)
                 # print(gaussians._scaling[gaussians.bg_num:].max(),gaussians._scaling[gaussians.bg_num:].mean())
                 # Densification

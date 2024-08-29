@@ -116,6 +116,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
         ja_path = os.path.join(model_path, name, "{}_{}".format(output_name,iteration), f"judder_angle_{judder_angle}")
         makedirs(ja_path, exist_ok=True)
         ja_prev = None
+
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
         rendering = render(view, gaussians, pipeline, background)["render"]
         gt = view.original_image[0:3, :, :].cpu().detach().numpy().transpose(1,2,0)
@@ -186,7 +187,6 @@ if __name__ == "__main__":
     parser.add_argument("--quiet", action="store_true")
     args = get_combined_args(parser)
     print("Rendering " + args.model_path)
-
     # Initialize system state (RNG)
     safe_state(args.quiet)
 
