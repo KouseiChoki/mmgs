@@ -10,9 +10,9 @@ def read_txt(path):
 
 
 
-def render_one(model_path, iteration, views, gaussians, pipeline, background,baseline_distance=0,judder_angle=0,output_name='ours'):
+def render_one(model_path, iteration, views, gaussians, pipeline, background,baseline_distance=0,judder_angle=0,output_name='ours',mid_num=-1):
     ja_prev = None
-    mid_num = len(views)//2
+    # mid_num = len(views)//2
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
         rendering = render(view, gaussians, pipeline, background)["render"]
         gt = view.original_image[0:3, :, :].cpu().detach().numpy().transpose(1,2,0)
@@ -50,14 +50,14 @@ def render_one(model_path, iteration, views, gaussians, pipeline, background,bas
                 write(bd_rendered, output_name.format(f'baseline_distance_{baseline_distance}'))
         
 
-def render_sets_mid(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool,baseline_distance=0,judder_angle=0,output_name='ours'):
+def render_sets_mid(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool,baseline_distance=0,judder_angle=0,output_name='ours',cur=-1):
     with torch.no_grad():
         gaussians = GaussianModel(dataset.sh_degree)
         scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
 
         bg_color = [1,1,1] if dataset.white_background else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
-        render_one(dataset.model_path, scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background,baseline_distance,judder_angle,output_name)
+        render_one(dataset.model_path, scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background,baseline_distance,judder_angle,output_name,cur)
 
         # if not skip_test:
         #      render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background,output_name)
@@ -89,7 +89,7 @@ if __name__ == '__main__':
         source_ = os.path.join(folder,'source_path.txt')
         assert os.path.isfile(source_),f'can not find source_path.txt,please check your data{source_}'
         tmp = read_txt(source_)
-        source,name = tmp[0].rstrip(),tmp[1].rstrip()
+        source,name,cur = tmp[0].rstrip(),tmp[1].rstrip(),int(tmp[2].rstrip())
         name += f'.{args_.format}'
         cmdlne_string_step = cmdlne_string.copy()
         cmdlne_string_step.append('--model_path')
@@ -98,4 +98,4 @@ if __name__ == '__main__':
         cmdlne_string_step.append(source)
         args = get_combined_args(parser,cmdlne_string_step)
         
-        render_sets_mid(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test,args.baseline_distance,args.judder_angle,os.path.join(args.output,'{}',name))
+        render_sets_mid(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test,args.baseline_distance,args.judder_angle,os.path.join(args.output,'{}',name),cur)

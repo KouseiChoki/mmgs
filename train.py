@@ -181,7 +181,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     print("\n[ITER {}] Saving Gaussians".format(iteration))
                     scene.save(iteration)
                     mid_num = len(scene.getTrainCameras())//2
-                    write_txt(os.path.join(scene.model_path,'source_path.txt'),[args.source_path,scene.getTrainCameras()[mid_num].image_name])
+                    write_txt(os.path.join(scene.model_path,'source_path.txt'),[args.source_path,scene.getTrainCameras()[mid_num].image_name,args.cur])
                     sys.exit(0)
                 # print(gaussians._scaling[gaussians.bg_num:].max(),gaussians._scaling[gaussians.bg_num:].mean())
                 # Densification
