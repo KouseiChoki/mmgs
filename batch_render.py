@@ -34,7 +34,7 @@ def render_one(model_path, iteration, views, gaussians, pipeline, background,bas
                 ja_view.camera_center = ja_view.world_view_transform.inverse()[3, :3]
                 ja_rendering = render(ja_view, gaussians, pipeline, background)["render"]
                 ja_rendered = ja_rendering.cpu().detach().numpy().transpose(1,2,0)
-                if idx == mid_num:
+                if idx == mid_num+1:
                     write(ja_rendered, output_name.format(f'ja_{judder_angle}'))
                 ja_prev = np.concatenate((rotmat2qvec(np.transpose(view.R.copy())),view.T.copy()))
 

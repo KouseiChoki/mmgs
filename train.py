@@ -180,8 +180,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     # else:
                     print("\n[ITER {}] Saving Gaussians".format(iteration))
                     scene.save(iteration)
-                    mid_num = len(scene.getTrainCameras())//2
-                    write_txt(os.path.join(scene.model_path,'source_path.txt'),[args.source_path,scene.getTrainCameras()[mid_num].image_name,args.cur])
+                    # mid_num = len(scene.getTrainCameras())//2
+                    write_txt(os.path.join(scene.model_path,'source_path.txt'),[args.source_path,scene.getTrainCameras()[args.cur].image_name,args.cur])
                     sys.exit(0)
                 # print(gaussians._scaling[gaussians.bg_num:].max(),gaussians._scaling[gaussians.bg_num:].mean())
                 # Densification
@@ -309,7 +309,7 @@ if __name__ == "__main__":
         match = re.search(r'cur_(\d+)', args.source_path)
         if match is not None:
             args.cur = int(match.group(1))
-        if args.cur>0:
+        if args.cur>=0:
             print(f'CF frame is :{args.cur}')
     # Start GUI server, configure and run training
     network_gui.init(args.ip, args.port)
