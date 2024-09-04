@@ -330,7 +330,7 @@ def mvread2(path):
 
 def read(path,type='flo',lut_file=None,self_mask=False,OPENEXR=True,Unrealmode=False,color_space=None):
     mvr = mvread3 if OPENEXR else mvread
-    if path == None or path.lower()=='none':
+    if path is None or path.lower()=='none' or not os.path.isfile(path):
         return None
     res = None
     if type.lower() == 'flo':

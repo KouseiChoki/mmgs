@@ -10,7 +10,7 @@ def read_txt(path):
 
 
 
-def render_one(model_path, iteration, views, gaussians, pipeline, background,baseline_distance=0,judder_angle=0,output_name='ours',mid_num=-1):
+def render_one(model_path, views, gaussians, pipeline, background,baseline_distance=0,output_name='ours',mid_num=-1):
     ja_prev = None
     # mid_num = len(views)//2
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
@@ -20,24 +20,6 @@ def render_one(model_path, iteration, views, gaussians, pipeline, background,bas
         if idx == mid_num:
             write(rendered, output_name.format('rendered'))
             write(gt, output_name.format('gt'))
-        if judder_angle!=0:
-            if ja_prev is None:
-                ja_prev = np.concatenate((rotmat2qvec(np.transpose(view.R.copy())),view.T.copy()))
-            else:
-                ja_view = deepcopy(view)
-                extr = ja_ajust(ja_prev,np.concatenate((rotmat2qvec(np.transpose(view.R.copy())),view.T.copy())),judder_angle)
-                ja_view.R = np.transpose(qvec2rotmat(extr[:4]))
-                ja_view.T = np.array(extr[4:])
-                ja_view.world_view_transform = torch.tensor(getWorld2View2(ja_view.R, ja_view.T, ja_view.trans, ja_view.scale)).transpose(0, 1).cuda()
-                ja_view.projection_matrix = getProjectionMatrix(znear=ja_view.znear, zfar=ja_view.zfar, fovX=ja_view.FoVx, fovY=ja_view.FoVy).transpose(0,1).cuda()
-                ja_view.full_proj_transform = (ja_view.world_view_transform.unsqueeze(0).bmm(ja_view.projection_matrix.unsqueeze(0))).squeeze(0)
-                ja_view.camera_center = ja_view.world_view_transform.inverse()[3, :3]
-                ja_rendering = render(ja_view, gaussians, pipeline, background)["render"]
-                ja_rendered = ja_rendering.cpu().detach().numpy().transpose(1,2,0)
-                if idx == mid_num+1:
-                    write(ja_rendered, output_name.format(f'ja_{judder_angle}'))
-                ja_prev = np.concatenate((rotmat2qvec(np.transpose(view.R.copy())),view.T.copy()))
-
         if baseline_distance!=0:
             view.T[0] -= baseline_distance
             view.world_view_transform = torch.tensor(getWorld2View2(view.R, view.T, view.trans, view.scale)).transpose(0, 1).cuda()
@@ -50,6 +32,22 @@ def render_one(model_path, iteration, views, gaussians, pipeline, background,bas
                 write(bd_rendered, output_name.format(f'baseline_distance_{baseline_distance}'))
         
 
+def render_ja(model_path, views, gaussians, pipeline, background,judder_angle=0,output_name='ours'):
+    if len(views) < 2:
+        return
+    ja_prev = np.concatenate((rotmat2qvec(np.transpose(views[0].R)), views[0].T))
+    ja_view = views[1]
+    extr = ja_ajust(ja_prev,np.concatenate((rotmat2qvec(np.transpose(ja_view.R.copy())),ja_view.T.copy())),judder_angle)
+    ja_view.R = np.transpose(qvec2rotmat(extr[:4]))
+    ja_view.T = np.array(extr[4:])
+    ja_view.world_view_transform = torch.tensor(getWorld2View2(ja_view.R, ja_view.T, ja_view.trans, ja_view.scale)).transpose(0, 1).cuda()
+    ja_view.projection_matrix = getProjectionMatrix(znear=ja_view.znear, zfar=ja_view.zfar, fovX=ja_view.FoVx, fovY=ja_view.FoVy).transpose(0,1).cuda()
+    ja_view.full_proj_transform = (ja_view.world_view_transform.unsqueeze(0).bmm(ja_view.projection_matrix.unsqueeze(0))).squeeze(0)
+    ja_view.camera_center = ja_view.world_view_transform.inverse()[3, :3]
+    ja_rendering = render(ja_view, gaussians, pipeline, background)["render"]
+    ja_rendered = ja_rendering.cpu().detach().numpy().transpose(1,2,0)
+    write(ja_rendered, output_name.format(f'ja_{judder_angle}'))
+
 def render_sets_mid(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool,baseline_distance=0,judder_angle=0,output_name='ours',cur=-1):
     with torch.no_grad():
         gaussians = GaussianModel(dataset.sh_degree)
@@ -57,20 +55,21 @@ def render_sets_mid(dataset : ModelParams, iteration : int, pipeline : PipelineP
 
         bg_color = [1,1,1] if dataset.white_background else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
-        render_one(dataset.model_path, scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background,baseline_distance,judder_angle,output_name,cur)
-
+        render_one(dataset.model_path, scene.getTrainCameras(), gaussians, pipeline, background,baseline_distance,output_name,cur)
+        if judder_angle!=0:
+            render_ja(dataset.model_path, scene.getTestCameras(), gaussians, pipeline, background,judder_angle,output_name)
         # if not skip_test:
         #      render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background,output_name)
 
 if __name__ == '__main__':
-    # Parse command-line arguments
+    # Parse command-line arguments --root /home/rg0775/QingHong/MM/3dgs/output/0902/ --output /home/rg0775/QingHong/MM/3dgs/output/0904 --baseline_distance 0.01 --judder_angle 360  
     parser = ArgumentParser(description="batch render script parameters")
     model = ModelParams(parser, sentinel=True)
     pipeline = PipelineParams(parser)
     parser.add_argument("--iteration", default=-1, type=int)
     parser.add_argument("--format", default='png', type=str)
     parser.add_argument("--baseline_distance", default=0, type=float)
-    parser.add_argument("--judder_angle", default=0, type=int)
+    parser.add_argument("--judder_angle","--ja", default=0, type=int)
     parser.add_argument("--skip_train", action="store_true")
     parser.add_argument("--skip_test", action="store_true")
     parser.add_argument("--quiet", action="store_true")

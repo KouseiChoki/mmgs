@@ -81,10 +81,10 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder):
     mask_enable = os.path.isdir(mask_path)
     masks = jhelp_file(mask_path) if mask_enable else None
     for idx, key in enumerate(cam_extrinsics):
-        sys.stdout.write('\r')
-        # the exact output you're looking for:
-        sys.stdout.write("Reading camera {}/{}".format(idx+1, len(cam_extrinsics)))
-        sys.stdout.flush()
+        # sys.stdout.write('\r')
+        # # the exact output you're looking for:
+        # sys.stdout.write("Reading camera {}/{}".format(idx+1, len(cam_extrinsics)))
+        # sys.stdout.flush()
 
         extr = cam_extrinsics[key]
         intr = cam_intrinsics[extr.camera_id]
@@ -117,7 +117,7 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder):
         cam_info = CameraInfo(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=image,mask=mask,
                               image_path=image_path, image_name=image_name, width=width, height=height)
         cam_infos.append(cam_info)
-    sys.stdout.write('\n')
+    # sys.stdout.write('\n')
     return cam_infos
 
 def fetchPly(path):
@@ -145,7 +145,7 @@ def storePly(path, xyz, rgb):
     ply_data = PlyData([vertex_element])
     ply_data.write(path)
 
-def readColmapSceneInfo(path, images, eval, llffhold=8):
+def readColmapSceneInfo(path, images, eval, llffhold=8,step=1):
     try:
         cameras_extrinsic_file = os.path.join(path, "sparse/0", "images.bin")
         cameras_intrinsic_file = os.path.join(path, "sparse/0", "cameras.bin")
@@ -166,7 +166,15 @@ def readColmapSceneInfo(path, images, eval, llffhold=8):
         test_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold == 0]
     else:
         train_cam_infos = cam_infos
-        test_cam_infos = []
+        ja_images_path = os.path.join(path, "sparse/0", "ja_images.txt") 
+        ja_cameras_path = os.path.join(path, "sparse/0", "ja_cameras.txt") 
+        if os.path.isfile(ja_images_path) and os.path.isfile(ja_cameras_path):
+            test_cam_extrinsics = read_extrinsics_text(ja_images_path)
+            test_cam_intrinsics = read_intrinsics_text(ja_cameras_path)
+            test_cam_infos_unsorted = readColmapCameras(cam_extrinsics=test_cam_extrinsics, cam_intrinsics=test_cam_intrinsics, images_folder=os.path.join(path, reading_dir))
+            test_cam_infos = sorted(test_cam_infos_unsorted.copy(), key = lambda x : x.image_name)
+        else:
+            test_cam_infos = []
 
     nerf_normalization = getNerfppNorm(train_cam_infos)
 

@@ -18,7 +18,7 @@ import sys
 # from scene import Scene, GaussianModel
 from scene import KouseiScene as Scene
 from scene import KouseiGaussianModel as GaussianModel
-
+import re
 from utils.general_utils import safe_state
 import uuid
 from tqdm import tqdm
@@ -70,7 +70,10 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
     cur = 0
-    for iteration in range(first_iter, opt.iterations + 1):       
+    iteration = first_iter
+    keep_training = True
+    # for iteration in range(first_iter, opt.iterations + 1):    
+    while keep_training:   
         if network_gui.conn == None:
             network_gui.try_connect()
         while network_gui.conn != None:
@@ -181,8 +184,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     print("\n[ITER {}] Saving Gaussians".format(iteration))
                     scene.save(iteration)
                     # mid_num = len(scene.getTrainCameras())//2
-                    write_txt(os.path.join(scene.model_path,'source_path.txt'),[args.source_path,scene.getTrainCameras()[args.cur].image_name,args.cur])
-                    sys.exit(0)
+                    if len(scene.getTestCameras())>0:
+                        write_txt(os.path.join(scene.model_path,'source_path.txt'),[args.source_path,scene.getTestCameras()[0].image_name,args.cur])
+                    # sys.exit(0)
                 # print(gaussians._scaling[gaussians.bg_num:].max(),gaussians._scaling[gaussians.bg_num:].mean())
                 # Densification
                 if iteration < opt.densify_until_iter:
@@ -212,12 +216,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     gaussians.optimizer.step()
                     gaussians.optimizer.zero_grad(set_to_none = True)
 
+                iteration += 1 
+                if iteration > opt.iterations:
+                    keep_training = False
                 # if (iteration in checkpoint_iterations):
                 #     print("\n[ITER {}] Saving Checkpoint".format(iteration))
                 #     torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")
             
 def prepare_output_and_logger(args,output):    
-    print(args)
     if not args.model_path:
         if os.getenv('OAR_JOB_ID'):
             unique_str=os.getenv('OAR_JOB_ID')
@@ -304,17 +310,31 @@ if __name__ == "__main__":
     # print("Optimizing " + args.model_path)
     # Initialize system state (RNG)
     safe_state(args.quiet)
-    if args.cur<0:
-        import re
-        match = re.search(r'cur_(\d+)', args.source_path)
-        if match is not None:
-            args.cur = int(match.group(1))
-        if args.cur>=0:
-            print(f'CF frame is :{args.cur}')
+    init_cur = args.cur
     # Start GUI server, configure and run training
     network_gui.init(args.ip, args.port)
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
-    training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from,args.output)
+
+    folders_with_images = []
+    # 遍历 root_dir 下的所有目录及子目录
+    for dirpath, dirnames, filenames in os.walk(args.source_path):
+        # 如果在当前目录中找到了 'images' 文件夹
+        if 'images' in dirnames:
+            folders_with_images.append(dirpath)
+    assert len(folders_with_images)>0,'error root'
+    output = args.output
+    folders_with_images = sorted(folders_with_images)
+    for i in range(len(folders_with_images)):
+        f = folders_with_images[i]
+        print(f'{i+1}/{len(folders_with_images)}')
+        args.source_path = f
+        args.output = os.path.join(output,os.path.basename(f))
+        if init_cur<0:
+            match = re.search(r'cur_(\d+)', args.source_path)
+            if match is not None:
+                args.cur = int(match.group(1))
+                print(f'CF frame is :{args.cur}')
+        training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from,args.output)
 
     # All done
     print("\nTraining complete.")
