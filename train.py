@@ -18,6 +18,7 @@ import sys
 # from scene import Scene, GaussianModel
 from scene import KouseiScene as Scene
 from scene import KouseiGaussianModel as GaussianModel
+# from scene import Scene, GaussianModel
 import re
 from utils.general_utils import safe_state
 import uuid
@@ -120,10 +121,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         if args.only_fg:
             render_steps = ['fg']
         for render_step in render_steps:
-            render_bg = render_step == 'bg'
+            render_bg = None
+            if render_step == 'bg':
+                render_bg = True
+            elif render_step == 'fg':
+                render_bg = False
             # with torch.no_grad():
             #     gaussians._scaling[gaussians.bg_num:].clamp_(max=0)
-            render_pkg = render(viewpoint_cam, gaussians, pipe, bg , render_bg)
+            render_pkg = render(viewpoint_cam, gaussians, pipe, bg ,render_bg=render_bg)
             image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
             # if iteration >= 100 and render_bg:
             #     import cv2
@@ -158,8 +163,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 loss = Ll1 
             else:
                 Ll1 = l1_loss(image, gt_image) 
-                loss = Ll1
-                # loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
+                # loss = Ll1
+                loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
 
             cur += 1
             loss.backward()
@@ -210,7 +215,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     
                     if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
                         gaussians.reset_opacity()
-
+                
                 # Optimizer step
                 if iteration < opt.iterations:
                     gaussians.optimizer.step()

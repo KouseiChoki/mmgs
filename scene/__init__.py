@@ -131,7 +131,7 @@ class KouseiScene:
 
     gaussians : KouseiGaussianModel
 
-    def __init__(self, args : ModelParams, gaussians : GaussianModel, load_iteration=None, shuffle=True, resolution_scales=[1.0]):
+    def __init__(self, args : ModelParams, gaussians : GaussianModel, load_iteration=None, shuffle=False, resolution_scales=[1.0]):
         """b
         :param path: Path to colmap scene main folder.
         """

@@ -181,7 +181,7 @@ if __name__ == "__main__":
     parser.add_argument("--name", default='ours', type=str)
     parser.add_argument("--format", default='png', type=str)
     parser.add_argument("--baseline_distance", default=0, type=float)
-    parser.add_argument("--judder_angle", default=0, type=int)
+    parser.add_argument("--judder_angle","--ja", default=0, type=int)
     parser.add_argument("--skip_train", action="store_true")
     parser.add_argument("--skip_test", action="store_true")
     parser.add_argument("--quiet", action="store_true")
