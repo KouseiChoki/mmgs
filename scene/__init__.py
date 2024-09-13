@@ -162,8 +162,8 @@ class KouseiScene:
                 dest_file.write(src_file.read())
             json_cams = []
             camlist = []
-            if scene_info.test_cameras:
-                camlist.extend(scene_info.test_cameras)
+            # if scene_info.test_cameras:
+            #     camlist.extend(scene_info.test_cameras)
             if scene_info.train_cameras:
                 camlist.extend(scene_info.train_cameras)
             for id, cam in enumerate(camlist):
