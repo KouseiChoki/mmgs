@@ -83,7 +83,8 @@ if __name__ == '__main__':
     safe_state(args_.quiet)
     folders = jhelp_folder(args_.root)
     assert len(folders)>0,'error root'
-    
+    if len(folders) == 1 and os.path.basename(folders[0]) == 'point_cloud':
+        folders = [args_.root]
     for folder in folders:
         source_ = os.path.join(folder,'source_path.txt')
         assert os.path.isfile(source_),f'can not find source_path.txt,please check your data{source_}'
@@ -96,5 +97,4 @@ if __name__ == '__main__':
         cmdlne_string_step.append('--source_path')
         cmdlne_string_step.append(source)
         args = get_combined_args(parser,cmdlne_string_step)
-        
         render_sets_mid(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test,args.baseline_distance,args.judder_angle,os.path.join(args.output,'{}',name),cur)

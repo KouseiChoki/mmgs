@@ -174,7 +174,7 @@ def readColmapSceneInfo(path, images, eval, llffhold=8,step=1):
             test_cam_infos_unsorted = readColmapCameras(cam_extrinsics=test_cam_extrinsics, cam_intrinsics=test_cam_intrinsics, images_folder=os.path.join(path, reading_dir))
             test_cam_infos = sorted(test_cam_infos_unsorted.copy(), key = lambda x : x.image_name)
         else:
-            test_cam_infos = []
+            test_cam_infos = train_cam_infos[:2]
 
     nerf_normalization = getNerfppNorm(train_cam_infos)
 
