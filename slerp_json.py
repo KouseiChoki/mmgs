@@ -108,7 +108,7 @@ def write_json(sp,datas):
         json.dump(datas, file)
 
 if __name__ == "__main__":
-    file_path = '/home/rg0775/QingHong/MM/3dgs/output/0913/cameras.json'  # 替换为你的 JSON 文件路径
+    file_path = '/home/rg0775/QingHong/a57/cameras.json'  # 替换为你的 JSON 文件路径
     json_datas = read_json(file_path)
     start_num = 0
     split_num = 4

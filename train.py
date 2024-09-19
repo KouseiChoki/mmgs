@@ -111,15 +111,16 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         bg = torch.rand((3), device="cuda") if opt.random_background else background
         render_steps = ['all']
         if hasattr(viewpoint_cam,'mask') and viewpoint_cam.mask is not None:
-            if args.cur>0:
-                if args.cur != cur: #背景
-                    render_steps = ['bg']
-                else: #背景+全部
-                    render_steps = ['bg','all']
-            else:
+            if args.masktype == 'bg': #bg
                 render_steps = ['bg']
-        if args.only_fg:
-            render_steps = ['fg']
+            elif args.masktype == 'fg': #fg
+                render_steps = ['fg']
+            else: #3d模式
+                if args.cur != cur: ##背景
+                    render_steps = ['bg']
+                else: ##背景+全部
+                    render_steps = ['bg','all']
+
         for render_step in render_steps:
             render_bg = None
             if render_step == 'bg':
@@ -131,33 +132,36 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             render_pkg = render(viewpoint_cam, gaussians, pipe, bg ,render_bg=render_bg)
             image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
             # if iteration >= 100 and render_bg:
-            #     import cv2
-            #     import numpy as np 
-            #     tmp = np.transpose(image.detach().cpu().numpy(),(1,2,0)) *255
-            #     cv2.imwrite('/home/rg0775/QingHong/MM/3dgs/1.png',tmp.astype('uint8')[...,::-1])
-            #     tmp = np.transpose(viewpoint_cam.original_image.detach().cpu().numpy(),(1,2,0)) *255
-            #     cv2.imwrite('/home/rg0775/QingHong/MM/3dgs/2.png',tmp.astype('uint8')[...,::-1])
-            #     tmp = viewpoint_cam.mask.detach().cpu().numpy().astype('uint8') *255
-            #     tmp = np.repeat(tmp[..., np.newaxis], 3, axis=-1)
-            #     cv2.imwrite('/home/rg0775/QingHong/MM/3dgs/3.png',tmp.astype('uint8')[...,::-1])
+                # import cv2
+                # import numpy as np 
+                # tmp = np.transpose(image.detach().cpu().numpy(),(1,2,0)) *255
+                # cv2.imwrite('/home/rg0775/QingHong/MM/3dgs/1.png',tmp.astype('uint8')[...,::-1])
+                # tmp = np.transpose(viewpoint_cam.original_image.detach().cpu().numpy(),(1,2,0)) *255
+                # cv2.imwrite('/home/rg0775/QingHong/MM/3dgs/2.png',tmp.astype('uint8')[...,::-1])
+                # tmp = viewpoint_cam.mask.detach().cpu().numpy().astype('uint8') *255
+                # tmp = np.repeat(tmp[..., np.newaxis], 3, axis=-1)
+                # cv2.imwrite('/home/rg0775/QingHong/MM/3dgs/3.png',tmp.astype('uint8')[...,::-1])
 
             # Loss
             gt_image = viewpoint_cam.original_image.float().cuda()
             # Mask loss
             if render_step != 'all':
+                mask = viewpoint_cam.mask
+                if args.reverse_mask:
+                    mask = ~mask
                 if render_step == 'fg':
-                    fg_mask = viewpoint_cam.mask
+                    fg_mask = mask
                     if False:
                         tmp_mask = fg_mask.detach().cpu().numpy().astype('float32')
                         tmp_mask = mask_adjust(tmp_mask,-10)
-                        fg_mask = torch.tensor(tmp_mask).bool().to(viewpoint_cam.mask.device)
-                    Ll1 = l1_loss_mask(image, gt_image,~viewpoint_cam.mask) 
+                        fg_mask = torch.tensor(tmp_mask).bool().to(mask.device)
+                    Ll1 = l1_loss_mask(image, gt_image,~mask) 
                     # mask_gt_image = gt_image.copy()
                     # print(mask_gt_image.shape)
                     # mask_gt_image[:,~viewpoint_cam.mask] 
                     # Ll1 = l1_loss(image, mask_gt_image) 
                 elif render_step == 'bg': #bg loss
-                    Ll1 = l1_loss_mask(image, gt_image,viewpoint_cam.mask) 
+                    Ll1 = l1_loss_mask(image, gt_image,mask) 
                 else:
                     raise NotImplementedError(f'error{render_step}')
                 loss = Ll1 
@@ -304,6 +308,8 @@ if __name__ == "__main__":
     parser.add_argument("--save_iterations", nargs="+", type=int, default=[3_000])
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--only_fg", action="store_true")
+    parser.add_argument("--reverse_mask",action="store_true")
+    parser.add_argument("--masktype",type=str, default = 'all')
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
     parser.add_argument("--output", type=str, default = '01')
@@ -334,6 +340,11 @@ if __name__ == "__main__":
         print(f'{i+1}/{len(folders_with_images)}')
         args.source_path = f
         args.output = os.path.join(output,os.path.basename(f))
+        if args.masktype == 'all':
+            if '_bg' in os.path.basename(args.source_path):
+                args.masktype = 'bg'
+            elif '_fg' in os.path.basename(args.source_path):
+                args.masktype = 'fg'
         if init_cur<0:
             match = re.search(r'cur_(\d+)', args.source_path)
             if match is not None:

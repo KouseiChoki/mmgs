@@ -57,7 +57,7 @@ class KouseiGaussianModel:
         self.percent_dense = 0
         self.spatial_lr_scale = 0
         self.setup_functions()
-        self.bg_num = 9999
+        self.bg_num = 9999999999
 
     def capture(self):
         return (
