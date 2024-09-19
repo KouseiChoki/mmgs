@@ -1,6 +1,7 @@
 import json
 import numpy as np
 from scipy.spatial.transform import Rotation as R
+import sys
 # 读取 JSON 文件
 def read_json(file_path):
     try:
@@ -108,10 +109,15 @@ def write_json(sp,datas):
         json.dump(datas, file)
 
 if __name__ == "__main__":
-    file_path = '/home/rg0775/QingHong/a57/cameras.json'  # 替换为你的 JSON 文件路径
+    if len(sys.argv)!=3:
+        raise ValueError('please specify your root and split_num, like python slerp_json.py root 4')
+    config_file = sys.argv[1]
+    # file_path = '/home/rg0775/QingHong/a57/cameras.json'  # 替换为你的 JSON 文件路径
+    file_path = sys.argv[1]
     json_datas = read_json(file_path)
     start_num = 0
-    split_num = 4
+    # split_num = 4
+    split_num = int(sys.argv[2])
     res_data = []
     id = 0
     for i in range(len(json_datas)-start_num):
