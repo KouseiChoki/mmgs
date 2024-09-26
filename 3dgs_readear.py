@@ -33,7 +33,7 @@ from cal_ply import ImageInfo,mkdir,CameraInfo,write_colmap_model,ja_ajust,jhelp
 from scipy.spatial.transform import Rotation as R
 from plyfile import PlyData, PlyElement
 # from striprtf.striprtf import rtf_to_text
-from fileutil.read_write_model import Camera,write_model,Image
+from read_write_model import Camera,write_model,Image
 from file_utils import mvwrite,read
 from myutil import mask_adjust,write_txt
 import argparse

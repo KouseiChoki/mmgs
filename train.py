@@ -312,7 +312,7 @@ if __name__ == "__main__":
     parser.add_argument("--masktype",type=str, default = 'all')
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
-    parser.add_argument("--output", type=str, default = '01')
+    parser.add_argument("--output", type=str, required=True)
 
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
