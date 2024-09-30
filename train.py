@@ -190,15 +190,19 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     # if render_bg is not None and not render_bg:
                     #     pass
                     # else:
+                    
                     print("\n[ITER {}] Saving Gaussians".format(iteration))
                     scene.save(iteration)
                     # mid_num = len(scene.getTrainCameras())//2
                     if len(scene.getTestCameras())>0:
                         write_txt(os.path.join(scene.model_path,'source_path.txt'),[args.source_path,scene.getTestCameras()[0].image_name,args.cur])
                     # sys.exit(0)
-                # print(gaussians._scaling[gaussians.bg_num:].max(),gaussians._scaling[gaussians.bg_num:].mean())
+                # print(gaussians._xyz.max(),gaussians._xyz.min(),gaussians.max_radii2D.max(),gaussians.max_radii2D.min())
+                # torch.clamp_(gaussians._xyz,-0,0)
+                torch.clamp_(gaussians.max_radii2D,0,103)
+                # print(gaussians._scaling.max(),gaussians._scaling.mean())
                 # Densification
-                if iteration < opt.densify_until_iter:
+                if False and iteration < opt.densify_until_iter:
                     # Keep track of max radii in image-space for pruning
                     if render_step == 'all':
                         max_radii2D = gaussians.max_radii2D

@@ -1,8 +1,8 @@
 
 from render import *
-from file_utils import jhelp_folder
+from file_utils import jhelp_folder,jhelp_file,gofind,mkdir
 import sys
-
+import shutil
 def read_txt(path):
     with open(path,'r') as f:
         result = f.readlines()
@@ -46,7 +46,9 @@ def render_ja(model_path, views, gaussians, pipeline, background,judder_angle=0,
     ja_view.camera_center = ja_view.world_view_transform.inverse()[3, :3]
     ja_rendering = render(ja_view, gaussians, pipeline, background)["render"]
     ja_rendered = ja_rendering.cpu().detach().numpy().transpose(1,2,0)
-    write(ja_rendered, output_name.format(f'ja_{judder_angle}'))
+    write(ja_rendered, output_name.replace(f'.{args.format}',f'_1.{args.format}'))
+    # for img in imgs_name:
+        # shutil.copy(img,os.path.join(os.path.dirname(output_name),os.path.basename(img)))
 
 def render_sets_mid(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool,baseline_distance=0,judder_angle=0,output_name='ours',cur=-1):
     with torch.no_grad():
@@ -57,12 +59,16 @@ def render_sets_mid(dataset : ModelParams, iteration : int, pipeline : PipelineP
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
         render_one(dataset.model_path, scene.getTrainCameras(), gaussians, pipeline, background,baseline_distance,output_name,cur)
         if judder_angle!=0:
-            render_ja(dataset.model_path, scene.getTestCameras(), gaussians, pipeline, background,judder_angle,output_name)
+            ja_output_name = output_name.format(f'ja_{judder_angle}')
+            render_ja(dataset.model_path, scene.getTestCameras(), gaussians, pipeline, background,judder_angle,ja_output_name)
+            s = os.path.join(args.source_img_root,os.path.basename(output_name))
+            t = os.path.join(ja_output_name.replace(f'.{args.format}',f'_0.{args.format}'))
+            shutil.copy(s,t)
         # if not skip_test:
         #      render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background,output_name)
 
 if __name__ == '__main__':
-    # Parse command-line arguments --root /home/rg0775/QingHong/MM/3dgs/output/0902/ --output /home/rg0775/QingHong/MM/3dgs/output/0904 --baseline_distance 0.01 --judder_angle 360  
+    # Parse command-line arguments --root /home/rg0775/QingHong/MM/3dgs/output/0902/ --output /home/rg0775/QingHong/MM/3dgs/output/0930 --judder_angle 360  
     parser = ArgumentParser(description="batch render script parameters")
     model = ModelParams(parser, sentinel=True)
     pipeline = PipelineParams(parser)
@@ -97,4 +103,5 @@ if __name__ == '__main__':
         cmdlne_string_step.append('--source_path')
         cmdlne_string_step.append(source)
         args = get_combined_args(parser,cmdlne_string_step)
+        args.source_img_root = os.path.join(source,'images')
         render_sets_mid(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test,args.baseline_distance,args.judder_angle,os.path.join(args.output,'{}',name),cur)
