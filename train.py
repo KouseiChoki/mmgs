@@ -199,7 +199,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     # sys.exit(0)
                 # print(gaussians._xyz.max(),gaussians._xyz.min(),gaussians.max_radii2D.max(),gaussians.max_radii2D.min())
                 # torch.clamp_(gaussians._xyz,-0,0)
-                torch.clamp_(gaussians.max_radii2D,0,103)
+                # torch.clamp_(gaussians.max_radii2D,0,103)
                 # print(gaussians._scaling.max(),gaussians._scaling.mean())
                 # Densification
                 if False and iteration < opt.densify_until_iter:
