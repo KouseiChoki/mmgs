@@ -10,7 +10,7 @@ def read_txt(path):
 
 
 
-def render_one(model_path, views, gaussians, pipeline, background,baseline_distance=0,output_name='ours',mid_num=-1):
+def render_one(model_path, views, gaussians, pipeline, background,baseline_distance=0,output_name='ours',mid_num=-1,render_name='rendered'):
     ja_prev = None
     # mid_num = len(views)//2
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
@@ -18,7 +18,7 @@ def render_one(model_path, views, gaussians, pipeline, background,baseline_dista
         gt = view.original_image[0:3, :, :].cpu().detach().numpy().transpose(1,2,0)
         rendered = rendering.cpu().detach().numpy().transpose(1,2,0)
         if idx == mid_num:
-            write(rendered, output_name.format('rendered'))
+            write(rendered, output_name.format(render_name))
             write(gt, output_name.format('gt'))
         if baseline_distance!=0:
             view.T[0] -= baseline_distance
@@ -57,13 +57,17 @@ def render_sets_mid(dataset : ModelParams, iteration : int, pipeline : PipelineP
 
         bg_color = [1,1,1] if dataset.white_background else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
-        render_one(dataset.model_path, scene.getTrainCameras(), gaussians, pipeline, background,baseline_distance,output_name,cur)
+        
         if judder_angle!=0:
+            output_name_ = output_name.replace(f'.{args.format}',f'_0.{args.format}')
+            render_one(dataset.model_path, scene.getTrainCameras(), gaussians, pipeline, background,baseline_distance,output_name_,cur,render_name=f'ja_{judder_angle}')
             ja_output_name = output_name.format(f'ja_{judder_angle}')
             render_ja(dataset.model_path, scene.getTestCameras(), gaussians, pipeline, background,judder_angle,ja_output_name)
-            s = os.path.join(args.source_img_root,os.path.basename(output_name))
-            t = os.path.join(ja_output_name.replace(f'.{args.format}',f'_0.{args.format}'))
-            shutil.copy(s,t)
+            # s = os.path.join(args.source_img_root,os.path.basename(output_name))
+            # t = os.path.join(ja_output_name.replace(f'.{args.format}',f'_0.{args.format}'))
+            # shutil.copy(s,t)
+        else:
+            render_one(dataset.model_path, scene.getTrainCameras(), gaussians, pipeline, background,baseline_distance,output_name,cur)
         # if not skip_test:
         #      render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background,output_name)
 
