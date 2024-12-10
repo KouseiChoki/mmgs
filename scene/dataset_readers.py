@@ -80,6 +80,8 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder):
     mask_path = os.path.join(os.path.dirname(images_folder),'masks')
     mask_enable = os.path.isdir(mask_path)
     masks = jhelp_file(mask_path) if mask_enable else None
+    if masks is not None and len(masks) ==0:
+        mask_enable = False
     for idx, key in enumerate(cam_extrinsics):
         # sys.stdout.write('\r')
         # # the exact output you're looking for:

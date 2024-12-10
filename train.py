@@ -174,7 +174,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             loss.backward()
             
             iter_end.record()
-
             with torch.no_grad():
                 # Progress bar
                 ema_loss_for_log = 0.4 * loss.item() + 0.6 * ema_loss_for_log
@@ -190,14 +189,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     # if render_bg is not None and not render_bg:
                     #     pass
                     # else:
-                    
+                    gaussians._xyz[:gaussians.bg_num,:] += 1
                     print("\n[ITER {}] Saving Gaussians".format(iteration))
                     scene.save(iteration)
                     # mid_num = len(scene.getTrainCameras())//2
                     if len(scene.getTestCameras())>0:
                         write_txt(os.path.join(scene.model_path,'source_path.txt'),[args.source_path,scene.getTestCameras()[0].image_name,args.cur])
                     # sys.exit(0)
-                # print(gaussians._xyz.max(),gaussians._xyz.min(),gaussians.max_radii2D.max(),gaussians.max_radii2D.min())
+                # print(gaussians._xyz.max(),gaussians._xyz.min())
                 # torch.clamp_(gaussians._xyz,-0,0)
                 # torch.clamp_(gaussians.max_radii2D,0,103)
                 # print(gaussians._scaling.max(),gaussians._scaling.mean())
