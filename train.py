@@ -189,7 +189,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     # if render_bg is not None and not render_bg:
                     #     pass
                     # else:
-                    gaussians._xyz[:gaussians.bg_num,:] += 1
+                    # gaussians._xyz[:gaussians.bg_num,:] += 1
                     print("\n[ITER {}] Saving Gaussians".format(iteration))
                     scene.save(iteration)
                     # mid_num = len(scene.getTrainCameras())//2
