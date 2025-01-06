@@ -23,6 +23,8 @@ from plyfile import PlyData, PlyElement
 from utils.sh_utils import SH2RGB
 from scene.gaussian_model import BasicPointCloud
 from file_utils import read
+from scene.fbx_loader import readFbxSceneInfo
+
 
 class CameraInfo(NamedTuple):
     uid: int
@@ -44,6 +46,7 @@ class SceneInfo(NamedTuple):
     test_cameras: list
     nerf_normalization: dict
     ply_path: str
+    is_nerf_synthetic: bool
 
 def jhelp(c):
 	return [os.path.join(c,i) for i in list(filter(lambda x:x[0]!='.',sorted(os.listdir(c))))]
@@ -287,5 +290,6 @@ def readNerfSyntheticInfo(path, white_background, eval, extension=".png"):
 
 sceneLoadTypeCallbacks = {
     "Colmap": readColmapSceneInfo,
-    "Blender" : readNerfSyntheticInfo
+    "Blender" : readNerfSyntheticInfo,
+    "Fbx":readFbxSceneInfo
 }

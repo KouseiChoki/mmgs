@@ -333,8 +333,12 @@ if __name__ == "__main__":
     # 遍历 root_dir 下的所有目录及子目录
     for dirpath, dirnames, filenames in os.walk(args.source_path):
         # 如果在当前目录中找到了 'images' 文件夹
-        if 'images' in dirnames:
+        if 'images' in dirnames and 'raw' not in dirnames:
             folders_with_images.append(dirpath)
+        if 'raw' in dirnames:
+            folders_with_images.append(dirpath)
+
+
     assert len(folders_with_images)>0,'error root'
     output = args.output
     folders_with_images = sorted(folders_with_images)

@@ -173,7 +173,7 @@ def render(viewpoint_camera, pc , pipe, bg_color : torch.Tensor, scaling_modifie
         sh_degree=pc.active_sh_degree,
         campos=viewpoint_camera.camera_center,
         prefiltered=False,
-        debug=pipe.debug
+        debug=pipe.debug,
     )
 
     rasterizer = GaussianRasterizer(raster_settings=raster_settings)
