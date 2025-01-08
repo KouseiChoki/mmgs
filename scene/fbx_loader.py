@@ -1,11 +1,14 @@
 import os
-from file_utils import read,jhelp_file
+from file_utils import read,jhelp_file,mkdir
 from scene.fbx_utils import fbx_reader
 import numpy as np
 import math
 from typing import NamedTuple
 from tqdm import tqdm
 from plyfile import PlyData, PlyElement
+import scipy
+
+MAX_DEPTH = 1e6
 
 class CameraInfo(NamedTuple):
     uid: int
@@ -19,6 +22,8 @@ class CameraInfo(NamedTuple):
     image_name: str
     width: int
     height: int
+    intr:np.array
+    extr:np.array
 
 class BasicPointCloud(NamedTuple):
     points : np.array
@@ -33,6 +38,20 @@ class SceneInfo(NamedTuple):
     nerf_normalization: dict
     ply_path: str
 
+
+def qvec2rotmat(qvec):
+    return np.array([
+        [1 - 2 * qvec[2]**2 - 2 * qvec[3]**2,
+         2 * qvec[1] * qvec[2] - 2 * qvec[0] * qvec[3],
+         2 * qvec[3] * qvec[1] + 2 * qvec[0] * qvec[2]],
+        [2 * qvec[1] * qvec[2] + 2 * qvec[0] * qvec[3],
+         1 - 2 * qvec[1]**2 - 2 * qvec[3]**2,
+         2 * qvec[2] * qvec[3] - 2 * qvec[0] * qvec[1]],
+        [2 * qvec[3] * qvec[1] - 2 * qvec[0] * qvec[2],
+         2 * qvec[2] * qvec[3] + 2 * qvec[0] * qvec[1],
+         1 - 2 * qvec[1]**2 - 2 * qvec[2]**2]])
+
+
 def fetchPly(path):
     plydata = PlyData.read(path)
     vertices = plydata['vertex']
@@ -44,18 +63,15 @@ def fetchPly(path):
 def cal_qvec(data):
     from scipy.spatial.transform import Rotation as R
     rx,ry,rz,tx,ty,tz = data
-    rotation_matrix = R.from_euler('ZYX', [rx,ry,rz],degrees=True).as_matrix()
+    rotation_matrix = R.from_euler('xyz', [rx,ry,rz],degrees=True).as_matrix()
     c2w = np.eye(4,4)
     c2w[:3,:3] = rotation_matrix
     translation_vector = [tx,ty,tz]
     c2w[:3,-1] = translation_vector
-     # change from OpenGL/Blender camera axes (Y up, Z back) to COLMAP (Y down, Z forward)
+    # change from OpenGL/Blender camera axes (Y up, Z back) to COLMAP (Y down, Z forward)
     c2w[:3, 1:3] *= -1
-    # get the world-to-camera transform and set R, T
-    w2c = np.linalg.inv(c2w)
-    R = np.transpose(w2c[:3,:3])  # R is stored transposed due to 'glm' in CUDA code
-    T = w2c[:3, 3]
-    return R,T
+    return c2w
+
 
 def getWorld2View2(R, t, translate=np.array([.0, .0, .0]), scale=1.0):
     Rt = np.zeros((4, 4))
@@ -109,7 +125,7 @@ def check_fbx_valid(root,keyword):
 def generate_data_from_fbx(root,keyword='_pw_fmt.fbx'):
     fbx_file = check_fbx_valid(root,keyword)
     if fbx_file is None:
-        return
+        raise ValueError('fbx file not found')
     image_dir,mask_dir,ply_file = '','',''
     for dir_name, subdir_list, file_list in os.walk(root):
         for tmp in subdir_list:
@@ -144,31 +160,128 @@ def readFbxCameras(fbx,images_folder,mask_folder):
         intr = cam_intrinsics
         height = intr['h']
         width = intr['w']
-        R,T = cal_qvec(extr)
-
+        c2w = cal_qvec(extr)
+        w2c = np.linalg.inv(c2w)
+        qx, qy, qz ,qw = scipy.spatial.transform.Rotation.from_matrix(w2c[:3, :3]).as_quat()
+        R = np.transpose(qvec2rotmat([qw,qx,qy,qz]))
+        T = w2c[:3, 3]
+        # change from OpenGL/Blender camera axes (Y up, Z back) to COLMAP (Y down, Z forward)
+        # c2w_colmap = c2w.copy()
+        # # c2w_colmap[:3, 1:3] *= -1
+        # R = c2w_colmap[:3,:3]
+        # T = c2w_colmap[:3, 3]
         FovY = focal2fov(intr['fx'], height)
         FovX = focal2fov(intr['fy'], width)
-
+        
         image_path = images[uid]
-        image_name = os.path.basename(image_path).split(".")[0]
-        # image = Image.open(image_path)
-        # mask = Image.open(masks[idx]) if mask_enable else None
+        z = os.path.basename(image_path)
+        image_name = z[:-z[::-1].find('.')-1]
         image = read(image_path,type='ldr')
         mask = read(masks[uid],type='mask') if mask_enable else None
 
         cam_info = CameraInfo(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=image,mask=mask,
-                              image_path=image_path, image_name=image_name, width=width, height=height)
+                              image_path=image_path, image_name=image_name, width=width,height=height,intr=intr,extr=c2w)
         cam_infos.append(cam_info)
     # sys.stdout.write('\n')
     return cam_infos
+
+
+def generate_point_cloud_from_depth(depth_image, intrinsics, extrinsics,mask=None):
+    h, w = depth_image.shape
+    i, j = np.meshgrid(np.arange(w), np.arange(h), indexing='xy')
+    # 相机内参
+    fx, fy = intrinsics[0, 0], intrinsics[1, 1]
+    cx, cy = intrinsics[0, 2], intrinsics[1, 2]
+    # 计算每个像素的三维坐标
+    z = depth_image.astype(np.float32) # 假设深度以毫米为单位，转换为米
+    x = (i - cx) * z / fx
+    y = (j - cy) * z / fy
+    # 将点组合成[N, 3]的点云
+    points_camera = np.stack((x, y, z), axis=-1).reshape(-1, 3)
+    # 去除非法点
+    if mask is not None:
+        points_camera = points_camera[mask]
+    # points_camera = points_camera[points_camera[:, 2] != 0]
+    # 将点云从相机坐标系转换到世界坐标系
+    points_world = (extrinsics[:3, :3] @ points_camera.T).T + extrinsics[:3, 3]
+    return points_world
+
+def get_ply(xyz,rgbs):
+    #create pointcloud
+    dtype = [
+        ("x", "f4"),
+        ("y", "f4"),
+        ("z", "f4"),
+        ("nx", "f4"),
+        ("ny", "f4"),
+        ("nz", "f4"),
+        ("red", "u1"),
+        ("green", "u1"),
+        ("blue", "u1"),
+    ]
+    # print('writing plyfile........')
+    normals = np.zeros_like(xyz)
+    elements = np.empty(xyz.shape[0], dtype=dtype)
+    assert xyz.shape[0] == rgbs.shape[0],'error input, please check your depth data(contains 0) or add --inverse_depth'
+    attributes = np.concatenate((xyz, normals, rgbs), axis=1)
+    elements[:] = list(map(tuple, attributes))
+    vertex_element = PlyElement.describe(elements, "vertex")
+    ply_data = PlyData([vertex_element])
+    return ply_data
+
+def generate_ply(images_folder,cam_infos,ply_path,down_scale=6,step=5,max_frame=1000):
+    depths_folder = images_folder.replace('images','depths').replace('image','depth')
+    images = jhelp_file(images_folder)[:max_frame]
+    depths = jhelp_file(depths_folder)
+    points,rgbs = [],[]
+    for i in tqdm(range(0,len(images),step),desc='generating pointcloud..'):
+        image = images[i]
+        depth = depths[i]
+        #intrin
+        intr = cam_infos[i].intr
+        w,h = intr['w'],intr['h']
+        o_cx = w/2.0 
+        o_cy = h/2.0
+        o_cx = o_cx //down_scale
+        o_cy = o_cy //down_scale
+        focal_length_x = intr['fx']/down_scale
+        focal_length_y = intr['fy']/down_scale
+        target_w = w//down_scale
+        target_h = h//down_scale
+        intrinsics = np.array([[focal_length_x,0,o_cx],[0,focal_length_y,o_cy],[0,0,1]])
+        #extrin
+        extr = cam_infos[i].extr
+        #rgb
+        rgb = read(image,type='image')
+        #depth
+        depth = read(depth)[...,0]
+        if down_scale != 1:
+            import cv2
+            depth = cv2.resize(depth,(target_w,target_h),interpolation=cv2.INTER_NEAREST)
+            rgb = cv2.resize(rgb,(target_w,target_h))
+        #pointcloud
+        point = generate_point_cloud_from_depth(depth,intrinsics,extr)
+        if point is not None:
+            point = point.reshape(-1,3)[depth.reshape(-1)<MAX_DEPTH]
+            points.append(point.reshape(-1,3))
+        if rgb is not None:
+            rgb = rgb.reshape(-1,3)[depth.reshape(-1)<MAX_DEPTH]
+            rgbs.append(rgb.reshape(-1,3))
+    print('preparing......')
+    xyz = np.concatenate(points)
+    rgbs = np.concatenate(rgbs)
+    ply_data = get_ply(xyz,rgbs)
+    mkdir(os.path.dirname(ply_path))
+    ply_data.write(ply_path)
+    return True
 
 def readFbxSceneInfo(path, eval, llffhold=8,step=1):
     try:
         fbx,images_folder,mask_folder,ply_path = generate_data_from_fbx(path)
     except:
         raise ValueError('not found FBX file')
-    cam_infos_unsorted = readFbxCameras(fbx,images_folder,mask_folder)
-    cam_infos = sorted(cam_infos_unsorted.copy(), key = lambda x : x.image_name)
+    cam_infos = readFbxCameras(fbx,images_folder,mask_folder)
+    # cam_infos = sorted(cam_infos_unsorted.copy(), key = lambda x : x.image_name)
 
     if eval:
         train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold != 0]
@@ -190,7 +303,16 @@ def readFbxSceneInfo(path, eval, llffhold=8,step=1):
     # bin_path = os.path.join(path, "sparse/0/points3D.bin")
     # txt_path = os.path.join(path, "sparse/0/points3D.txt")
     fg_ply_path = ply_path.replace('points3D','fg_points3D')
-    pcd = fetchPly(ply_path)
+    # -s /home/rg0775/QingHong/MM/3dgs/mydata/UE_XYPitchYaw_nopointcloud --output 0106 -r 8
+    if len(ply_path)>1:
+        pcd = fetchPly(ply_path)
+    else:
+        ply_path = os.path.join(path,'Pointcloud','generated','points3D.ply')
+        flag = generate_ply(images_folder,cam_infos,ply_path)
+        if flag:
+            pcd = fetchPly(ply_path)
+        else:
+            raise EOFError('not enough memory to generate ply file')
     try:
         fgpcd = fetchPly(fg_ply_path)
     except:
@@ -202,50 +324,3 @@ def readFbxSceneInfo(path, eval, llffhold=8,step=1):
                            nerf_normalization=nerf_normalization,
                            ply_path=ply_path)
     return scene_info
-
-def readCamerasFromTransforms(path, transformsfile, white_background, extension=".png"):
-    cam_infos = []
-
-    with open(os.path.join(path, transformsfile)) as json_file:
-        contents = json.load(json_file)
-        fovx = contents["camera_angle_x"]
-
-        frames = contents["frames"]
-        for idx, frame in enumerate(frames):
-            cam_name = os.path.join(path, frame["file_path"] + extension)
-
-            # NeRF 'transform_matrix' is a camera-to-world transform
-            c2w = np.array(frame["transform_matrix"])
-            # change from OpenGL/Blender camera axes (Y up, Z back) to COLMAP (Y down, Z forward)
-            c2w[:3, 1:3] *= -1
-
-            # get the world-to-camera transform and set R, T
-            w2c = np.linalg.inv(c2w)
-            R = np.transpose(w2c[:3,:3])  # R is stored transposed due to 'glm' in CUDA code
-            T = w2c[:3, 3]
-
-            image_path = os.path.join(path, cam_name)
-            image_name = Path(cam_name).stem
-            image = Image.open(image_path)
-
-            im_data = np.array(image.convert("RGBA"))
-
-            bg = np.array([1,1,1]) if white_background else np.array([0, 0, 0])
-
-            norm_data = im_data / 255.0
-            arr = norm_data[:,:,:3] * norm_data[:, :, 3:4] + bg * (1 - norm_data[:, :, 3:4])
-            image = Image.fromarray(np.array(arr*255.0, dtype=np.byte), "RGB")
-
-            fovy = focal2fov(fov2focal(fovx, image.size[0]), image.size[1])
-            FovY = fovy 
-            FovX = fovx
-
-            cam_infos.append(CameraInfo(uid=idx, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
-                            image_path=image_path, image_name=image_name, width=image.size[0], height=image.size[1]))
-            
-    return cam_infos
-
-
-# path = '/home/rg0775/QingHong/MM/3dgs/mydata/UE_XYPitchYaw'
-# # fbx,images_folder,mask_folder,ply_file = generate_data_from_fbx(path)
-# readFbxSceneInfo(path,False)

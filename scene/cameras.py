@@ -77,6 +77,10 @@ class Camera(nn.Module):
         self.mask = mask>0 if mask is not None else None
         self.zfar = 100.0
         self.znear = 0.01
+        # print(FoVx,FoVy)
+        # print(image.mean())
+        # import sys
+        # sys.exit(0)
 
         self.trans = trans
         self.scale = scale
