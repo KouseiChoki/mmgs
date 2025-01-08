@@ -229,7 +229,7 @@ def get_ply(xyz,rgbs):
     ply_data = PlyData([vertex_element])
     return ply_data
 
-def generate_ply(images_folder,cam_infos,ply_path,down_scale=6,step=5,max_frame=1000):
+def generate_ply(images_folder,cam_infos,ply_path,down_scale=1,step=1,max_frame=1000):
     depths_folder = images_folder.replace('images','depths').replace('image','depth')
     images = jhelp_file(images_folder)[:max_frame]
     depths = jhelp_file(depths_folder)
