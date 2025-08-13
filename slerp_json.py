@@ -174,5 +174,6 @@ if __name__ == "__main__":
 
         res_json.append(js)
     write_json(sp,res_json)
+    print(f'finished,saved in {sp}')
 
 

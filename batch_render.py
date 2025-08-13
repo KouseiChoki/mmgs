@@ -7,7 +7,7 @@ def read_txt(path):
     with open(path,'r') as f:
         result = f.readlines()
     return result
-
+from copy import deepcopy
 
 
 def render_one(model_path, views, gaussians, pipeline, background,baseline_distance=0,output_name='ours',mid_num=-1,render_name='rendered'):
@@ -18,8 +18,8 @@ def render_one(model_path, views, gaussians, pipeline, background,baseline_dista
         gt = view.original_image[0:3, :, :].cpu().detach().numpy().transpose(1,2,0)
         rendered = rendering.cpu().detach().numpy().transpose(1,2,0)
         if idx == mid_num:
-            write(rendered, output_name.format(render_name))
-            write(gt, output_name.format('gt'))
+                write(rendered, output_name.format(render_name))
+                write(gt, output_name.format('gt'))
         if baseline_distance!=0:
             view.T[0] -= baseline_distance
             view.world_view_transform = torch.tensor(getWorld2View2(view.R, view.T, view.trans, view.scale)).transpose(0, 1).cuda()
@@ -71,8 +71,35 @@ def render_sets_mid(dataset : ModelParams, iteration : int, pipeline : PipelineP
         # if not skip_test:
         #      render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background,output_name)
 
+
+def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool,baseline_distance=0,judder_angle=0,name='ours',cur=-1):
+    with torch.no_grad():
+        gaussians = GaussianModel(dataset.sh_degree)
+        scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
+
+        bg_color = [1,1,1] if dataset.white_background else [0, 0, 0]
+        background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
+        
+        if judder_angle!=0:
+            num_scene = len(scene.getTrainCameras())
+            output_name = [os.path.join(args.output,'{}',str(int(name)+i)+f'.{args.format}') for i in range(num_scene)]
+            # output_name_ = output_name.replace(f'.{args.format}',f'_0.{args.format}')
+            for i in range(num_scene):
+                render_one(dataset.model_path, [scene.getTrainCameras()[i]], gaussians, pipeline, background,baseline_distance,output_name[i].replace(f'.{args.format}',f'_0.{args.format}'),mid_num=0,render_name=f'ja_{judder_angle}')
+                if i != num_scene-1:
+                    tmp = deepcopy(scene.getTrainCameras()[i:i+2])
+                    ja_output_name = output_name[i].format(f'ja_{judder_angle}')
+                    render_ja(dataset.model_path, tmp, gaussians, pipeline, background,judder_angle,ja_output_name)
+            # s = os.path.join(args.source_img_root,os.path.basename(output_name))
+            # t = os.path.join(ja_output_name.replace(f'.{args.format}',f'_0.{args.format}'))
+            # shutil.copy(s,t)
+        else:
+            render_one(dataset.model_path, scene.getTrainCameras(), gaussians, pipeline, background,baseline_distance,output_name,cur)
+        # if not skip_test:
+        #      render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background,output_name)
+
 if __name__ == '__main__':
-    # Parse command-line arguments --root /home/rg0775/QingHong/MM/3dgs/output/0902/ --output /home/rg0775/QingHong/MM/3dgs/output/0930 --judder_angle 360  
+    # Parse command-line arguments --root /home/rg0775/QingHong/MM/3dgs/mydata/res/1025_from_1025_to_1034_nomask_cur_0 --output /home/rg0775/QingHong/MM/3dgs/mydata/res/render_result_ja360all  --render_all --ja 360
     parser = ArgumentParser(description="batch render script parameters")
     model = ModelParams(parser, sentinel=True)
     pipeline = PipelineParams(parser)
@@ -85,6 +112,7 @@ if __name__ == '__main__':
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--root", required=True, type=str)
     parser.add_argument("--output", required=True, type=str)
+    parser.add_argument("--render_all", action='store_true')
 
     cmdlne_string = sys.argv[1:]
     cfgfile_string = "Namespace()"
@@ -99,8 +127,8 @@ if __name__ == '__main__':
         source_ = os.path.join(folder,'source_path.txt')
         assert os.path.isfile(source_),f'can not find source_path.txt,please check your data{source_}'
         tmp = read_txt(source_)
-        source,name,cur = tmp[0].rstrip(),tmp[1].rstrip(),int(tmp[2].rstrip())
-        name += f'.{args_.format}'
+        source,name_,cur = tmp[0].rstrip(),tmp[1].rstrip(),int(tmp[2].rstrip())
+        name =name_+ f'.{args_.format}'
         cmdlne_string_step = cmdlne_string.copy()
         cmdlne_string_step.append('--model_path')
         cmdlne_string_step.append(folder)
@@ -108,4 +136,7 @@ if __name__ == '__main__':
         cmdlne_string_step.append(source)
         args = get_combined_args(parser,cmdlne_string_step)
         args.source_img_root = os.path.join(source,'images')
-        render_sets_mid(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test,args.baseline_distance,args.judder_angle,os.path.join(args.output,'{}',name),cur)
+        if args.render_all:
+            render_sets(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test,args.baseline_distance,args.judder_angle,name_,cur)
+        else:
+            render_sets_mid(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test,args.baseline_distance,args.judder_angle,os.path.join(args.output,'{}',name),cur)
