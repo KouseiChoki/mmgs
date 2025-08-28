@@ -2,7 +2,7 @@
 from render import *
 from file_utils import jhelp_folder,jhelp_file,gofind,mkdir
 import sys
-import shutil
+import re
 def read_txt(path):
     with open(path,'r') as f:
         result = f.readlines()
@@ -82,7 +82,9 @@ def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParam
         
         if judder_angle!=0:
             num_scene = len(scene.getTrainCameras())
-            output_name = [os.path.join(args.output,'{}',str(int(name)+i)+f'.{args.format}') for i in range(num_scene)]
+            num = int(os.path.splitext(name)[0].split('_')[-1])
+            output_name = [os.path.join(args.output, '{}', f"{num+i}.{args.format}") for i in range(num_scene)]
+            # output_name = [os.path.join(args.output,'{}',str(int(name)+i)+f'.{args.format}') for i in range(num_scene)]
             # output_name_ = output_name.replace(f'.{args.format}',f'_0.{args.format}')
             for i in range(num_scene):
                 render_one(dataset.model_path, [scene.getTrainCameras()[i]], gaussians, pipeline, background,baseline_distance,output_name[i].replace(f'.{args.format}',f'_0.{args.format}'),mid_num=0,render_name=f'ja_{judder_angle}')

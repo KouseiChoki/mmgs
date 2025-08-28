@@ -81,7 +81,9 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder):
     cam_infos = []
     mask_path = os.path.join(os.path.dirname(images_folder),'masks')
     mask_enable = os.path.isdir(mask_path)
-    masks = jhelp_file(mask_path) if mask_enable else None
+    masks = sorted(jhelp_file(mask_path),key=lambda x: (("_right" + os.path.splitext(x)[-1]) in x, x)) if mask_enable else None
+
+    
     if masks is not None and len(masks) ==0:
         mask_enable = False
     for idx, key in enumerate(cam_extrinsics):
