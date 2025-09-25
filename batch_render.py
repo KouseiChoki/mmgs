@@ -53,21 +53,41 @@ def render_ja(model_path, views, gaussians, pipeline, background,judder_angle=0,
 def render_sets_mid(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool,baseline_distance=0,judder_angle=0,output_name='ours',cur=-1):
     with torch.no_grad():
         gaussians = GaussianModel(dataset.sh_degree)
-        scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
-
+        all_scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
+        stages = []
+        stereo,left = False,True
+        if args.split >0 and args.split<1:
+            left_scene = all_scene[:int(args.split * len(all_scene))]
+            right_scene= all_scene[int(args.split * len(all_scene)):]
+            stages = [left_scene,right_scene]
+            stereo = True
+        else:
+            stages = [all_scene]
         bg_color = [1,1,1] if dataset.white_background else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
         
-        if judder_angle!=0:
-            output_name_ = output_name.replace(f'.{args.format}',f'_0.{args.format}')
-            render_one(dataset.model_path, scene.getTrainCameras(), gaussians, pipeline, background,baseline_distance,output_name_,cur,render_name=f'ja_{judder_angle}')
-            ja_output_name = output_name.format(f'ja_{judder_angle}')
-            render_ja(dataset.model_path, scene.getTestCameras(), gaussians, pipeline, background,judder_angle,ja_output_name)
-            # s = os.path.join(args.source_img_root,os.path.basename(output_name))
-            # t = os.path.join(ja_output_name.replace(f'.{args.format}',f'_0.{args.format}'))
-            # shutil.copy(s,t)
-        else:
-            render_one(dataset.model_path, scene.getTrainCameras(), gaussians, pipeline, background,baseline_distance,output_name,cur)
+        for scene in stages:
+            if judder_angle!=0:
+                if stereo:
+                    if left:
+                        ctmp = '/left/{}'  
+                        left = False
+                    else:
+                        ctmp = '/right/{}'  
+                    output_name_ = output_name.replace('{}',ctmp)
+                    render_one(dataset.model_path, scene.getTrainCameras(), gaussians, pipeline, background,baseline_distance,output_name_,cur,render_name=f'ja_{judder_angle}')
+                    ja_output_name = output_name.format(f'ja_{judder_angle}')
+                    render_ja(dataset.model_path, scene.getTestCameras(), gaussians, pipeline, background,judder_angle,ja_output_name)
+                else:
+                    output_name_ = output_name.replace(f'.{args.format}',f'_0.{args.format}')
+                    render_one(dataset.model_path, scene.getTrainCameras(), gaussians, pipeline, background,baseline_distance,output_name_,cur,render_name=f'ja_{judder_angle}')
+                    ja_output_name = output_name.format(f'ja_{judder_angle}')
+                    render_ja(dataset.model_path, scene.getTestCameras(), gaussians, pipeline, background,judder_angle,ja_output_name)
+                # s = os.path.join(args.source_img_root,os.path.basename(output_name))
+                # t = os.path.join(ja_output_name.replace(f'.{args.format}',f'_0.{args.format}'))
+                # shutil.copy(s,t)
+            else:
+                render_one(dataset.model_path, scene.getTrainCameras(), gaussians, pipeline, background,baseline_distance,output_name,cur)
         # if not skip_test:
         #      render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background,output_name)
 
@@ -115,6 +135,7 @@ if __name__ == '__main__':
     parser.add_argument("--root", required=True, type=str)
     parser.add_argument("--output", required=True, type=str)
     parser.add_argument("--render_all", action='store_true')
+    parser.add_argument("--split",default=0, type=float)
 
     cmdlne_string = sys.argv[1:]
     cfgfile_string = "Namespace()"
