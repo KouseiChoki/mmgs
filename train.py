@@ -194,7 +194,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     scene.save(iteration)
                     # mid_num = len(scene.getTrainCameras())//2
                     if len(scene.getTestCameras())>0:
-                        write_txt(os.path.join(scene.model_path,'source_path.txt'),[args.source_path,scene.getTestCameras()[0].image_name,args.cur])
+                        write_txt(os.path.join(scene.model_path,'source_path.txt'),[args.source_path,scene.getTestCameras()[args.cur].image_name,args.cur])
                     # sys.exit(0)
                 # print(gaussians._xyz.max(),gaussians._xyz.min())
                 # torch.clamp_(gaussians._xyz,-0,0)

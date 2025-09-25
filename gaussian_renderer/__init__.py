@@ -174,6 +174,7 @@ def render(viewpoint_camera, pc , pipe, bg_color : torch.Tensor, scaling_modifie
         campos=viewpoint_camera.camera_center,
         prefiltered=False,
         debug=pipe.debug,
+        antialiasing=None
     )
 
     rasterizer = GaussianRasterizer(raster_settings=raster_settings)
@@ -210,7 +211,7 @@ def render(viewpoint_camera, pc , pipe, bg_color : torch.Tensor, scaling_modifie
         colors_precomp = override_color
 
     # Rasterize visible Gaussians to image, obtain their radii (on screen). 
-    rendered_image, radii = rasterizer(
+    rendered_image, radii,_ = rasterizer(
         means3D = means3D,
         means2D = means2D,
         shs = shs,
