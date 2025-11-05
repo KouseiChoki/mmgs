@@ -13,24 +13,25 @@ from copy import deepcopy
 def render_one(model_path, views, gaussians, pipeline, background,baseline_distance=0,output_name='ours',mid_num=-1,render_name='rendered'):
     ja_prev = None
     # mid_num = len(views)//2
-    for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
-        rendering = render(view, gaussians, pipeline, background)["render"]
-        gt = view.original_image[0:3, :, :].cpu().detach().numpy().transpose(1,2,0)
-        gt = np.clip(gt,0,1)
-        rendered = rendering.cpu().detach().numpy().transpose(1,2,0)
-        if idx == mid_num:
-                write(rendered, output_name.format(render_name))
-                write(gt, output_name.format('gt'))
-        if baseline_distance!=0:
-            view.T[0] -= baseline_distance
-            view.world_view_transform = torch.tensor(getWorld2View2(view.R, view.T, view.trans, view.scale)).transpose(0, 1).cuda()
-            view.projection_matrix = getProjectionMatrix(znear=view.znear, zfar=view.zfar, fovX=view.FoVx, fovY=view.FoVy).transpose(0,1).cuda()
-            view.full_proj_transform = (view.world_view_transform.unsqueeze(0).bmm(view.projection_matrix.unsqueeze(0))).squeeze(0)
-            view.camera_center = view.world_view_transform.inverse()[3, :3]
-            bd_rendering = render(view, gaussians, pipeline, background)["render"]
-            bd_rendered = bd_rendering.cpu().detach().numpy().transpose(1,2,0)
-            if idx == mid_num:
-                write(bd_rendered, output_name.format(f'baseline_distance_{baseline_distance}'))
+    # for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
+    view = views[mid_num]
+    rendering = render(view, gaussians, pipeline, background)["render"]
+    gt = view.original_image[0:3, :, :].cpu().detach().numpy().transpose(1,2,0)
+    gt = np.clip(gt,0,1)
+    rendered = rendering.cpu().detach().numpy().transpose(1,2,0)
+    # if idx == mid_num:
+    write(rendered, output_name.format(render_name))
+    write(gt, output_name.format('gt'))
+    if baseline_distance!=0:
+        view.T[0] -= baseline_distance
+        view.world_view_transform = torch.tensor(getWorld2View2(view.R, view.T, view.trans, view.scale)).transpose(0, 1).cuda()
+        view.projection_matrix = getProjectionMatrix(znear=view.znear, zfar=view.zfar, fovX=view.FoVx, fovY=view.FoVy).transpose(0,1).cuda()
+        view.full_proj_transform = (view.world_view_transform.unsqueeze(0).bmm(view.projection_matrix.unsqueeze(0))).squeeze(0)
+        view.camera_center = view.world_view_transform.inverse()[3, :3]
+        bd_rendering = render(view, gaussians, pipeline, background)["render"]
+        bd_rendered = bd_rendering.cpu().detach().numpy().transpose(1,2,0)
+        # if idx == mid_num:
+        write(bd_rendered, output_name.format(f'baseline_distance_{baseline_distance}'))
         
 
 def render_ja(model_path, views, gaussians, pipeline, background,judder_angle=0,output_name='ours'):
@@ -66,7 +67,7 @@ def render_sets_mid(dataset : ModelParams, iteration : int, pipeline : PipelineP
             stages = [['all',all_scene]]
         bg_color = [1,1,1] if dataset.white_background else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
-        print(stages)
+        # print(stages)
         for scene_name,scene in stages:
             if judder_angle!=0:
                 if stereo:
@@ -84,7 +85,7 @@ def render_sets_mid(dataset : ModelParams, iteration : int, pipeline : PipelineP
                 # t = os.path.join(ja_output_name.replace(f'.{args.format}',f'_0.{args.format}'))
                 # shutil.copy(s,t)
             else:
-                render_one(dataset.model_path, scene[cur:], gaussians, pipeline, background,baseline_distance,output_name,cur)
+                render_one(dataset.model_path, scene, gaussians, pipeline, background,baseline_distance,output_name,cur)
         # if not skip_test:
         #      render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background,output_name)
 
