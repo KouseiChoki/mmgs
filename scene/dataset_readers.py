@@ -24,7 +24,7 @@ from utils.sh_utils import SH2RGB
 from scene.gaussian_model import BasicPointCloud
 from file_utils import read
 from scene.fbx_loader import readFbxSceneInfo
-
+import re
 
 class CameraInfo(NamedTuple):
     uid: int
@@ -114,7 +114,10 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder):
             assert False, "Colmap camera model not handled: only undistorted datasets (PINHOLE or SIMPLE_PINHOLE cameras) supported!"
 
         image_path = os.path.join(images_folder, os.path.basename(extr.name))
-        image_name = os.path.basename(image_path).split(".")[-2]
+        nums = re.findall(r'\d+', image_path)
+        image_name = str(nums[-1])
+
+        # image_name = os.path.basename(image_path).split(".")[-2]
         # image = Image.open(image_path)
         # mask = Image.open(masks[idx]) if mask_enable else None
         image = read(image_path,type='ldr')
@@ -165,8 +168,8 @@ def readColmapSceneInfo(path, images, eval, llffhold=8,step=1):
 
     reading_dir = "images" if images == None else images
     cam_infos_unsorted = readColmapCameras(cam_extrinsics=cam_extrinsics, cam_intrinsics=cam_intrinsics, images_folder=os.path.join(path, reading_dir))
-    cam_infos = sorted(cam_infos_unsorted.copy(), key = lambda x : x.image_name)
-
+    # cam_infos = sorted(cam_infos_unsorted.copy(), key = lambda x : x.image_name)
+    cam_infos = sorted(cam_infos_unsorted.copy(), key = lambda x : (("_right" + os.path.splitext(x.image_name)[-1]) in x.image_name, x)) 
     if eval:
         train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold != 0]
         test_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold == 0]
@@ -180,7 +183,7 @@ def readColmapSceneInfo(path, images, eval, llffhold=8,step=1):
             test_cam_infos_unsorted = readColmapCameras(cam_extrinsics=test_cam_extrinsics, cam_intrinsics=test_cam_intrinsics, images_folder=os.path.join(path, reading_dir))
             test_cam_infos = sorted(test_cam_infos_unsorted.copy(), key = lambda x : x.image_name)
         else:
-            test_cam_infos = train_cam_infos[:2]
+            test_cam_infos = train_cam_infos
 
     nerf_normalization = getNerfppNorm(train_cam_infos)
 

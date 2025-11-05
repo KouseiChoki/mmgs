@@ -34,7 +34,7 @@ from cal_ply import ImageInfo,mkdir,CameraInfo,write_colmap_model,ja_ajust,jhelp
 from scipy.spatial.transform import Rotation as R
 from plyfile import PlyData, PlyElement
 # from striprtf.striprtf import rtf_to_text
-from fileutil.read_write_model import Camera,write_model,Image
+from read_write_model import Camera,write_model,Image
 from file_utils import write,read
 from myutil import mask_adjust,write_txt
 import argparse
@@ -740,7 +740,7 @@ if __name__ == '__main__':
                 masks_prepare.append(l_masks[index:index+max_frame] + r_masks[index:index+max_frame])
                 depths_prepare.append(l_depths[index:index+max_frame] + r_depths[index:index+max_frame])
                 extrinsics.append(ext_+ext_r)
-                curs.append((max_frame+1)//2)
+                curs.append(max_frame//2)
 
             args.step = 1
             args.max_frame = max_frame
