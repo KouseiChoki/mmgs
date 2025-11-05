@@ -13,23 +13,25 @@ from copy import deepcopy
 def render_one(model_path, views, gaussians, pipeline, background,baseline_distance=0,output_name='ours',mid_num=-1,render_name='rendered'):
     ja_prev = None
     # mid_num = len(views)//2
-    for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
-        rendering = render(view, gaussians, pipeline, background)["render"]
-        gt = view.original_image[0:3, :, :].cpu().detach().numpy().transpose(1,2,0)
-        rendered = rendering.cpu().detach().numpy().transpose(1,2,0)
-        if idx == mid_num:
-                write(rendered, output_name.format(render_name))
-                write(gt, output_name.format('gt'))
-        if baseline_distance!=0:
-            view.T[0] -= baseline_distance
-            view.world_view_transform = torch.tensor(getWorld2View2(view.R, view.T, view.trans, view.scale)).transpose(0, 1).cuda()
-            view.projection_matrix = getProjectionMatrix(znear=view.znear, zfar=view.zfar, fovX=view.FoVx, fovY=view.FoVy).transpose(0,1).cuda()
-            view.full_proj_transform = (view.world_view_transform.unsqueeze(0).bmm(view.projection_matrix.unsqueeze(0))).squeeze(0)
-            view.camera_center = view.world_view_transform.inverse()[3, :3]
-            bd_rendering = render(view, gaussians, pipeline, background)["render"]
-            bd_rendered = bd_rendering.cpu().detach().numpy().transpose(1,2,0)
-            if idx == mid_num:
-                write(bd_rendered, output_name.format(f'baseline_distance_{baseline_distance}'))
+    # for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
+    view = views[mid_num]
+    rendering = render(view, gaussians, pipeline, background)["render"]
+    gt = view.original_image[0:3, :, :].cpu().detach().numpy().transpose(1,2,0)
+    gt = np.clip(gt,0,1)
+    rendered = rendering.cpu().detach().numpy().transpose(1,2,0)
+    # if idx == mid_num:
+    write(rendered, output_name.format(render_name))
+    write(gt, output_name.format('gt'))
+    if baseline_distance!=0:
+        view.T[0] -= baseline_distance
+        view.world_view_transform = torch.tensor(getWorld2View2(view.R, view.T, view.trans, view.scale)).transpose(0, 1).cuda()
+        view.projection_matrix = getProjectionMatrix(znear=view.znear, zfar=view.zfar, fovX=view.FoVx, fovY=view.FoVy).transpose(0,1).cuda()
+        view.full_proj_transform = (view.world_view_transform.unsqueeze(0).bmm(view.projection_matrix.unsqueeze(0))).squeeze(0)
+        view.camera_center = view.world_view_transform.inverse()[3, :3]
+        bd_rendering = render(view, gaussians, pipeline, background)["render"]
+        bd_rendered = bd_rendering.cpu().detach().numpy().transpose(1,2,0)
+        # if idx == mid_num:
+        write(bd_rendered, output_name.format(f'baseline_distance_{baseline_distance}'))
         
 
 def render_ja(model_path, views, gaussians, pipeline, background,judder_angle=0,output_name='ours'):
@@ -50,44 +52,40 @@ def render_ja(model_path, views, gaussians, pipeline, background,judder_angle=0,
     # for img in imgs_name:
         # shutil.copy(img,os.path.join(os.path.dirname(output_name),os.path.basename(img)))
 
-def render_sets_mid(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool,baseline_distance=0,judder_angle=0,output_name='ours',cur=-1):
+def render_sets_mid(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool,baseline_distance=0,judder_angle=0,output_name='ours',cur=1):
     with torch.no_grad():
         gaussians = GaussianModel(dataset.sh_degree)
-        all_scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
+        all_scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False).getTrainCameras()
         stages = []
-        stereo,left = False,True
+        stereo = False
         if args.split >0 and args.split<1:
             left_scene = all_scene[:int(args.split * len(all_scene))]
             right_scene= all_scene[int(args.split * len(all_scene)):]
-            stages = [left_scene,right_scene]
+            stages = [['left',left_scene],['right',right_scene]]
             stereo = True
         else:
-            stages = [all_scene]
+            stages = [['all',all_scene]]
         bg_color = [1,1,1] if dataset.white_background else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
-        
-        for scene in stages:
+        # print(stages)
+        for scene_name,scene in stages:
             if judder_angle!=0:
                 if stereo:
-                    if left:
-                        ctmp = '/left/{}'  
-                        left = False
-                    else:
-                        ctmp = '/right/{}'  
+                    ctmp = '/'+scene_name+'/{}'  
                     output_name_ = output_name.replace('{}',ctmp)
-                    render_one(dataset.model_path, scene.getTrainCameras(), gaussians, pipeline, background,baseline_distance,output_name_,cur,render_name=f'ja_{judder_angle}')
-                    ja_output_name = output_name.format(f'ja_{judder_angle}')
-                    render_ja(dataset.model_path, scene.getTestCameras(), gaussians, pipeline, background,judder_angle,ja_output_name)
+                    render_one(dataset.model_path, scene, gaussians, pipeline, background,baseline_distance,output_name_,cur,render_name=f'ja_{judder_angle}')
+                    ja_output_name = output_name_.format(f'ja_{judder_angle}')
+                    render_ja(dataset.model_path, scene[cur:], gaussians, pipeline, background,judder_angle,ja_output_name)
                 else:
                     output_name_ = output_name.replace(f'.{args.format}',f'_0.{args.format}')
-                    render_one(dataset.model_path, scene.getTrainCameras(), gaussians, pipeline, background,baseline_distance,output_name_,cur,render_name=f'ja_{judder_angle}')
+                    render_one(dataset.model_path, scene, gaussians, pipeline, background,baseline_distance,output_name_,cur,render_name=f'ja_{judder_angle}')
                     ja_output_name = output_name.format(f'ja_{judder_angle}')
-                    render_ja(dataset.model_path, scene.getTestCameras(), gaussians, pipeline, background,judder_angle,ja_output_name)
+                    render_ja(dataset.model_path, scene[cur:], gaussians, pipeline, background,judder_angle,ja_output_name)
                 # s = os.path.join(args.source_img_root,os.path.basename(output_name))
                 # t = os.path.join(ja_output_name.replace(f'.{args.format}',f'_0.{args.format}'))
                 # shutil.copy(s,t)
             else:
-                render_one(dataset.model_path, scene.getTrainCameras(), gaussians, pipeline, background,baseline_distance,output_name,cur)
+                render_one(dataset.model_path, scene, gaussians, pipeline, background,baseline_distance,output_name,cur)
         # if not skip_test:
         #      render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background,output_name)
 
